@@ -1,0 +1,8 @@
+sun3d-brown_bm_4-brown_bm_4
+sun3d-harvard_c11-hv_c11_2
+7-scenes-heads
+rgbd-scenes-v2-scene_10
+bundlefusion-office0_1
+bundlefusion-office0_2
+bundlefusion-office0_3
+analysis-by-synthesis-apt2-kitchen
