@@ -16,6 +16,7 @@ Code will be released for paper reproduction.
 ## News
 
 2022.02.15: Paper is available at [arXiv](https://arxiv.org/abs/2202.06688).
+
 2022.02.14: Code and pretrained model on 3DMatch/3DLoMatch release.
 
 ## Installation
