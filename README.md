@@ -2,9 +2,9 @@
 
 PyTorch implementation of the paper:
 
-Geometric Transformer for Fast and Robust Point Cloud Registration.
+[Geometric Transformer for Fast and Robust Point Cloud Registration](https://arxiv.org/abs/2202.06688).
 
-Zheng Qin, Hao Yu, Changjian Wang, Yulan Guo, Yuxing Peng, and Kai Xu
+[Zheng Qin](https://scholar.google.com/citations?user=DnHBAN0AAAAJ), [Hao Yu](https://scholar.google.com/citations?user=g7JfRn4AAAAJ), Changjian Wang, [Yulan Guo](https://scholar.google.com/citations?user=WQRNvdsAAAAJ), Yuxing Peng, and [Kai Xu](https://scholar.google.com/citations?user=GuVkg-8AAAAJ).
 
 ## Introduction
 
@@ -14,6 +14,9 @@ Code will be released for paper reproduction.
 ![](assets/teaser.png)
 
 ## News
+
+2022.02.15: Paper is available at [arXiv](https://arxiv.org/abs/2202.06688).
+2022.02.14: Code and pretrained model on 3DMatch/3DLoMatch release.
 
 ## Installation
 
@@ -90,3 +93,17 @@ Replace `3DMatch` with `3DLoMatch` to evaluate on 3DLoMatch.
 | --------- | --- | -- | -- |
 | 3DMatch | 97.7 | 70.3 | 91.5 |
 | 3DLoMatch | 88.1 | 43.3 | 74.0 |
+
+
+## Citation
+
+```bibtex
+@misc{qin2022geometric,
+      title={Geometric Transformer for Fast and Robust Point Cloud Registration},
+      author={Zheng Qin and Hao Yu and Changjian Wang and Yulan Guo and Yuxing Peng and Kai Xu},
+      year={2022},
+      eprint={2202.06688},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
+}
+```
