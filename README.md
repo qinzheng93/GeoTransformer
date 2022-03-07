@@ -9,11 +9,12 @@ PyTorch implementation of the paper:
 ## Introduction
 
 We study the problem of extracting accurate correspondences for point cloud registration. Recent keypoint-free methods bypass the detection of repeatable keypoints which is difficult in low-overlap scenarios, showing great potential in registration. They seek correspondences over downsampled superpoints, which are then propagated to dense points. Superpoints are matched based on whether their neighboring patches overlap. Such sparse and loose matching requires contextual features capturing the geometric structure of the point clouds. We propose Geometric Transformer to learn geometric feature for robust superpoint matching. It encodes pair-wise distances and triplet-wise angles, making it robust in low-overlap cases and invariant to rigid transformation. The simplistic design attains surprisingly high matching accuracy such that no RANSAC is required in the estimation of alignment transformation, leading to $100$ times acceleration. Our method improves the inlier ratio by $17\% \sim 30\%$ and the registration recall by over $7\%$ on the challenging 3DLoMatch benchmark.
-Code will be released for paper reproduction.
 
 ![](assets/teaser.png)
 
 ## News
+
+2022.03.02: This work is accepted by CVPR 2022. Code and Models on ModelNet40 and KITTI will be released soon.
 
 2022.02.15: Paper is available at [arXiv](https://arxiv.org/abs/2202.06688).
 
