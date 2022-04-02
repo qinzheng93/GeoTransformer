@@ -1,9 +1,19 @@
+import ipdb
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+import torch.nn as nn
 
 
-def circle_loss(pos_masks, neg_masks, feat_dists, pos_margin, neg_margin, pos_optimal, neg_optimal, log_scale):
+def circle_loss(
+    pos_masks,
+    neg_masks,
+    feat_dists,
+    pos_margin,
+    neg_margin,
+    pos_optimal,
+    neg_optimal,
+    log_scale,
+):
     # get anchors that have both positive and negative pairs
     row_masks = (torch.gt(pos_masks.sum(-1), 0) & torch.gt(neg_masks.sum(-1), 0)).detach()
     col_masks = (torch.gt(pos_masks.sum(-2), 0) & torch.gt(neg_masks.sum(-2), 0)).detach()
@@ -32,16 +42,16 @@ def circle_loss(pos_masks, neg_masks, feat_dists, pos_margin, neg_margin, pos_op
 
 
 def weighted_circle_loss(
-        pos_masks,
-        neg_masks,
-        feat_dists,
-        pos_margin,
-        neg_margin,
-        pos_optimal,
-        neg_optimal,
-        log_scale,
-        pos_scales=None,
-        neg_scales=None
+    pos_masks,
+    neg_masks,
+    feat_dists,
+    pos_margin,
+    neg_margin,
+    pos_optimal,
+    neg_optimal,
+    log_scale,
+    pos_scales=None,
+    neg_scales=None,
 ):
     # get anchors that have both positive and negative pairs
     row_masks = (torch.gt(pos_masks.sum(-1), 0) & torch.gt(neg_masks.sum(-1), 0)).detach()
@@ -87,8 +97,14 @@ class CircleLoss(nn.Module):
 
     def forward(self, pos_masks, neg_masks, feat_dists):
         return circle_loss(
-            pos_masks, neg_masks, feat_dists, self.pos_margin, self.neg_margin, self.pos_optimal, self.neg_optimal,
-            self.log_scale
+            pos_masks,
+            neg_masks,
+            feat_dists,
+            self.pos_margin,
+            self.neg_margin,
+            self.pos_optimal,
+            self.neg_optimal,
+            self.log_scale,
         )
 
 
@@ -101,8 +117,16 @@ class WeightedCircleLoss(nn.Module):
         self.neg_optimal = neg_optimal
         self.log_scale = log_scale
 
-    def forward(self, pos_masks, neg_masks, feat_dists, pos_scales):
+    def forward(self, pos_masks, neg_masks, feat_dists, pos_scales=None, neg_scales=None):
         return weighted_circle_loss(
-            pos_masks, neg_masks, feat_dists, self.pos_margin, self.neg_margin, self.pos_optimal,
-            self.neg_optimal, self.log_scale, pos_scales=pos_scales
+            pos_masks,
+            neg_masks,
+            feat_dists,
+            self.pos_margin,
+            self.neg_margin,
+            self.pos_optimal,
+            self.neg_optimal,
+            self.log_scale,
+            pos_scales=pos_scales,
+            neg_scales=neg_scales,
         )

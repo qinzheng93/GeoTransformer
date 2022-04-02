@@ -1,5 +1,6 @@
-import coloredlogs
 import logging
+
+import coloredlogs
 
 
 def create_logger(log_file=None):
@@ -27,26 +28,26 @@ def create_logger(log_file=None):
 class Logger:
     def __init__(self, log_file=None, local_rank=-1):
         if local_rank == 0 or local_rank == -1:
-            self._logger = create_logger(log_file=log_file)
+            self.logger = create_logger(log_file=log_file)
         else:
-            self._logger = None
+            self.logger = None
 
     def debug(self, message):
-        if self._logger is not None:
-            self._logger.debug(message)
+        if self.logger is not None:
+            self.logger.debug(message)
 
     def info(self, message):
-        if self._logger is not None:
-            self._logger.info(message)
+        if self.logger is not None:
+            self.logger.info(message)
 
     def warning(self, message):
-        if self._logger is not None:
-            self._logger.warning(message)
+        if self.logger is not None:
+            self.logger.warning(message)
 
     def error(self, message):
-        if self._logger is not None:
-            self._logger.error(message)
+        if self.logger is not None:
+            self.logger.error(message)
 
     def critical(self, message):
-        if self._logger is not None:
-            self._logger.critical(message)
+        if self.logger is not None:
+            self.logger.critical(message)

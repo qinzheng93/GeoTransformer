@@ -14,6 +14,10 @@ We study the problem of extracting accurate correspondences for point cloud regi
 
 ## News
 
+2022.03.30: Code and pretrained models on KITTI and ModelNet40 release.
+
+2022.03.29: This work is selected for an **ORAL** presentation at CVPR 2022.
+
 2022.03.02: This work is accepted by CVPR 2022. Code and Models on ModelNet40 and KITTI will be released soon.
 
 2022.02.15: Paper is available at [arXiv](https://arxiv.org/abs/2202.06688).
@@ -33,20 +37,17 @@ conda activate geotransformer
 pip install torch==1.7.1+cu110 -f https://download.pytorch.org/whl/torch_stable.html
 
 # Install packages and other dependencies
+pip install -r requirements.txt
 python setup.py build develop
-
-# Compile c++ wrappers
-cd geotransformer/cpp_wrappers
-sh ./compile_wrappers.sh
 ```
 
 Code has been tested with Ubuntu 20.04, GCC 9.3.0, Python 3.8, PyTorch 1.7.1, CUDA 11.1 and cuDNN 8.1.0.
 
-## Data preparation
+## 3DMatch
 
-We provide code for training and testing on 3DMatch.
+### Data preparation
 
-The dataset can be download from [PREDATOR](https://github.com/overlappredator/OverlapPredator). The data should be organized as follows:
+The dataset can be downloaded from [PREDATOR](https://github.com/prs-eth/OverlapPredator). The data should be organized as follows:
 
 ```text
 --data--3DMatch--metadata
@@ -57,14 +58,12 @@ The dataset can be download from [PREDATOR](https://github.com/overlappredator/O
                           |                    |--...
                           |--...
 ```
-
 ## Training
 
-The code for GeoTransformer is in `experiments/geotransformer.3dmatch`. Use the following command for training.
+The code for 3DMatch is in `experiments/geotransformer.3dmatch.stage4.gse.k3.max.oacl.stage2.sinkhorn`. Use the following command for training.
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python trainval.py
-# use "--snapshot=path/to/snapshot" to resume training.
 ```
 
 ## Testing
@@ -84,18 +83,121 @@ We also provide pretrained weights in `weights`, use the following command to te
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python test.py --snapshot=../../weights/geotransformer-3dmatch.pth.tar --benchmark=3DMatch
-CUDA_VISIBLE_DEVICES=0 python eval.py --run_matching --run_registration --benchmark=3DMatch
+CUDA_VISIBLE_DEVICES=0 python eval.py --benchmark=3DMatch --method=lgr
 ```
 
 Replace `3DMatch` with `3DLoMatch` to evaluate on 3DLoMatch.
 
+## Kitti odometry
+
+### Data preparation
+
+Download the data from the [Kitti official website](http://www.cvlibs.net/datasets/kitti/eval_odometry.php) into `data/Kitti` and run `data/Kitti/downsample_pcd.py` to generate the data. The data should be organized as follows:
+
+```text
+--data--Kitti--metadata
+            |--sequences--00--velodyne--000000.bin
+            |              |         |--...
+            |              |...
+            |--downsampled--00--000000.npy
+                         |   |--...
+                         |--...
+```
+
+### Training
+
+The code for Kitti is in `experiments/geotransformer.kitti.stage5.gse.k3.max.oacl.stage2.sinkhorn`. Use the following command for training.
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python trainval.py
+```
+
+## Testing
+
+Use the following command for testing.
+
+```bash
+CUDA_VISIBLE_DEVICES=0 ./eval.sh EPOCH
+```
+
+`EPOCH` is the epoch id.
+
+We also provide pretrained weights in `weights`, use the following command to test the pretrained weights.
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python test.py --snapshot=../../weights/geotransformer-kitti.pth.tar
+CUDA_VISIBLE_DEVICES=0 python eval.py --method=lgr
+```
+
+## ModelNet
+
+### Data preparation
+
+Download the [data](https://shapenet.cs.stanford.edu/media/modelnet40_ply_hdf5_2048.zip) and run `data/ModelNet/split_data.py` to generate the data. The data should be organized as follows:
+
+```text
+--data--ModelNet--modelnet_ply_hdf5_2048--...
+               |--train.pkl
+               |--val.pkl
+               |--test.pkl
+```
+
+### Training
+
+The code for ModelNet is in `experiments/geotransformer.modelnet.rpmnet.stage4.gse.k3.max.oacl.stage2.sinkhorn`. Use the following command for training.
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python trainval.py
+```
+
+## Testing
+
+Use the following command for testing.
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python test.py --test_iter=ITER
+```
+
+`ITER` is the iteration id.
+
+We also provide pretrained weights in `weights`, use the following command to test the pretrained weights.
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python test.py --snapshot=../../weights/geotransformer-modelnet.pth.tar
+```
+
 ## Results
 
-| Benchmark | FMR | IR | RR |
-| --------- | --- | -- | -- |
-| 3DMatch | 97.7 | 70.3 | 91.5 |
-| 3DLoMatch | 88.1 | 43.3 | 74.0 |
+### 3DMatch
 
+We evaluate GeoTransformer on the standard 3DMatch/3DLoMatch benchmarks as in [PREDATOR](https://arxiv.org/abs/2011.13005).
+
+| Benchmark | FMR  |  IR  |  RR   |
+|:----------|:----:|:----:|:-----:|
+| 3DMatch   | 98.2 | 70.9 | 92.5  |
+| 3DLoMatch | 87.1 | 43.5 | 74.2  |
+
+### Kitti odometry
+
+We evaluate GeoTransformer on the standard Kitti benchmark as in [PREDATOR](https://arxiv.org/abs/2011.13005).
+
+| Benchmark |  RRE  | RTE |  RR  |
+|:----------|:-----:|:---:|:----:|
+| Kitti     | 0.230 | 6.2 | 99.8 |
+
+### ModelNet
+
+We evaluate GeoTransformer on ModelNet with two settings:
+
+1. Standard setting: [0, 45] rotation, [-0.5, 0.5] translation, gaussian noise clipped to 0.05.
+2. Full-range setting: [0, 180] rotation, [-0.5, 0.5] translation, gaussian noise clipped to 0.05.
+
+We remove symmetric classes and use the data augmentation in [RPMNet](https://arxiv.org/abs/2003.13479) which is more difficult than [PRNet](https://arxiv.org/abs/1910.12240).
+
+| Benchmark           |  RRE  |  RTE  | RMSE  |
+|:--------------------|:-----:|:-----:|:-----:|
+| seen (45$^{circ}$)  | 1.577 | 0.018 | 0.017 |
+| seen (180$^{circ}$) | 6.830 | 0.044 | 0.042 |
 
 ## Citation
 
@@ -109,3 +211,12 @@ Replace `3DMatch` with `3DLoMatch` to evaluate on 3DLoMatch.
       primaryClass={cs.CV}
 }
 ```
+
+## Acknowledgements
+
+- [D3Feat](https://github.com/XuyangBai/D3Feat.pytorch)
+- [PREDATOR](https://github.com/prs-eth/OverlapPredator)
+- [RPMNet](https://github.com/yewzijian/RPMNet)
+- [CoFiNet](https://github.com/haoyu94/Coarse-to-fine-correspondences)
+- [huggingface-transformer](https://github.com/huggingface/transformers)
+- [SuperGlue](https://github.com/magicleap/SuperGluePretrainedNetwork)
