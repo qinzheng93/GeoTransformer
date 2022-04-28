@@ -1,2 +1,9 @@
 .idea
 .vscode
+build
+output
+*.egg-info
+*.so
+**/__pycache__
+weights/*
+pretrained

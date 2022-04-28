@@ -43,6 +43,10 @@ python setup.py build develop
 
 Code has been tested with Ubuntu 20.04, GCC 9.3.0, Python 3.8, PyTorch 1.7.1, CUDA 11.1 and cuDNN 8.1.0.
 
+## Pre-trained Weights
+
+We provide pre-trained weights in the [release](https://github.com/qinzheng93/GeoTransformer/releases) page. Please download the latest weights and put them in `weights` directory.
+
 ## 3DMatch
 
 ### Data preparation
@@ -58,7 +62,8 @@ The dataset can be downloaded from [PREDATOR](https://github.com/prs-eth/Overlap
                           |                    |--...
                           |--...
 ```
-## Training
+
+### Training
 
 The code for 3DMatch is in `experiments/geotransformer.3dmatch.stage4.gse.k3.max.oacl.stage2.sinkhorn`. Use the following command for training.
 
@@ -66,7 +71,7 @@ The code for 3DMatch is in `experiments/geotransformer.3dmatch.stage4.gse.k3.max
 CUDA_VISIBLE_DEVICES=0 python trainval.py
 ```
 
-## Testing
+### Testing
 
 Use the following command for testing.
 
@@ -112,7 +117,7 @@ The code for Kitti is in `experiments/geotransformer.kitti.stage5.gse.k3.max.oac
 CUDA_VISIBLE_DEVICES=0 python trainval.py
 ```
 
-## Testing
+### Testing
 
 Use the following command for testing.
 
@@ -150,7 +155,7 @@ The code for ModelNet is in `experiments/geotransformer.modelnet.rpmnet.stage4.g
 CUDA_VISIBLE_DEVICES=0 python trainval.py
 ```
 
-## Testing
+### Testing
 
 Use the following command for testing.
 
@@ -165,6 +170,16 @@ We also provide pretrained weights in `weights`, use the following command to te
 ```bash
 CUDA_VISIBLE_DEVICES=0 python test.py --snapshot=../../weights/geotransformer-modelnet.pth.tar
 ```
+
+## Multi-GPU Training
+
+As the point clouds usually have different sizes, we organize them in the *pack* mode. This causes difficulty for batch training as we need to convert the data between *batch* mode and *pack* mode frequently. For this reason, we limit the batch size to 1 per GPU at this time and support batch training via `DistributedDataParallel`. Use `torch.distributed.launch` for multi-gpu training:
+
+```bash
+CUDA_VISIBLE_DEVICES=GPUS python -m torch.distributed.launch --nproc_per_node=NGPUS trainval.py
+```
+
+Note that the learning rate is multiplied by the number of GPUs by default as the batch size increased. In our experiments, multi-gpu training slightly improves the performance.
 
 ## Results
 
@@ -194,10 +209,10 @@ We evaluate GeoTransformer on ModelNet with two settings:
 
 We remove symmetric classes and use the data augmentation in [RPMNet](https://arxiv.org/abs/2003.13479) which is more difficult than [PRNet](https://arxiv.org/abs/1910.12240).
 
-| Benchmark           |  RRE  |  RTE  | RMSE  |
-|:--------------------|:-----:|:-----:|:-----:|
-| seen (45$^{circ}$)  | 1.577 | 0.018 | 0.017 |
-| seen (180$^{circ}$) | 6.830 | 0.044 | 0.042 |
+| Benchmark      |  RRE  |  RTE  | RMSE  |
+|:---------------|:-----:|:-----:|:-----:|
+| seen (45-deg)  | 1.577 | 0.018 | 0.017 |
+| seen (180-deg) | 6.830 | 0.044 | 0.042 |
 
 ## Citation
 
@@ -220,3 +235,4 @@ We remove symmetric classes and use the data augmentation in [RPMNet](https://ar
 - [CoFiNet](https://github.com/haoyu94/Coarse-to-fine-correspondences)
 - [huggingface-transformer](https://github.com/huggingface/transformers)
 - [SuperGlue](https://github.com/magicleap/SuperGluePretrainedNetwork)
+
