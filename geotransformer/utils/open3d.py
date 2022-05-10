@@ -1,18 +1,15 @@
 import numpy as np
 import open3d as o3d
+import matplotlib.colors as colors
 
 
 def get_color(color_name):
-    if color_name == 'red':
-        return np.asarray([1.0, 0.0, 0.0])
-    elif color_name == 'blue':
-        return np.asarray([0.0, 0.0, 1.0])
-    elif color_name == 'green':
-        return np.asarray([0.0, 1.0, 0.0])
-    elif color_name == 'yellow':
-        return np.asarray([0.0, 1.0, 1.0])
-    else:
-        raise RuntimeError(f'Unsupported color: {color_name}.')
+    if color_name == "custom_yellow":
+        return np.asarray([255.0, 204.0, 102.0]) / 255.0
+    if color_name == "custom_blue":
+        return np.asarray([102.0, 153.0, 255.0]) / 255.0
+    assert color_name in colors.CSS4_COLORS
+    return np.asarray(colors.to_rgb(colors.CSS4_COLORS[color_name]))
 
 
 def make_scaling_along_axis(points, axis=2, alpha=0):
@@ -92,7 +89,7 @@ def make_open3d_axis(axis_vector=None, origin=None, scale=1.0):
     axes = o3d.geometry.LineSet()
     axes.points = o3d.utility.Vector3dVector(points)
     axes.lines = o3d.utility.Vector2iVector(line)
-    axes.paint_uniform_color(get_color('red'))
+    axes.paint_uniform_color(get_color("red"))
     return axes
 
 
@@ -120,16 +117,16 @@ def make_open3d_corr_lines(ref_corr_points, src_corr_points, label):
     corr_lines = o3d.geometry.LineSet()
     corr_lines.points = o3d.utility.Vector3dVector(corr_points)
     corr_lines.lines = o3d.utility.Vector2iVector(corr_indices)
-    if label == 'pos':
+    if label == "pos":
         corr_lines.paint_uniform_color(np.asarray([0.0, 1.0, 0.0]))
-    elif label == 'neg':
+    elif label == "neg":
         corr_lines.paint_uniform_color(np.asarray([1.0, 0.0, 0.0]))
     else:
-        raise ValueError('Unsupported `label` {} for correspondences'.format(label))
+        raise ValueError("Unsupported `label` {} for correspondences".format(label))
     return corr_lines
 
 
-def open3d_draw(*geometries):
+def draw_geometries(*geometries):
     o3d.visualization.draw_geometries(geometries)
 
 
