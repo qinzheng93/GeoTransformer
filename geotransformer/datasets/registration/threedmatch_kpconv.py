@@ -2,6 +2,7 @@ import os.path as osp
 import pickle
 import random
 from functools import partial
+import open3d as o3d
 
 import torch
 import torch.utils.data
@@ -24,8 +25,9 @@ class ThreeDMatchPairKPConvDataset(torch.utils.data.Dataset):
         super(ThreeDMatchPairKPConvDataset, self).__init__()
 
         self.dataset_root = dataset_root
-        self.metadata_root = osp.join(self.dataset_root, 'metadata')
-        self.data_root = osp.join(self.dataset_root, 'data')
+        # self.metadata_root = osp.join(self.dataset_root, 'metadata')
+        self.metadata_root = osp.join('/root/aiyang/GeoTransformer/data/3DMatch', 'metadata')
+        self.data_root = osp.join(self.dataset_root, 'data', 'indoor')
         self.subset = subset
         self.use_augmentation = use_augmentation
         self.noise_magnitude = noise_magnitude
@@ -81,11 +83,27 @@ class ThreeDMatchPairKPConvDataset(torch.utils.data.Dataset):
         # get correspondence at fine level
         transform = get_transform_from_rotation_translation(rotation, translation)
 
+        # normal
+        # src_pcd, tgt_pcd = normal(npy2pcd(src_points)), normal(npy2pcd(tgt_points))
+        src_pcd = o3d.geometry.PointCloud()
+        tgt_pcd = o3d.geometry.PointCloud()
+        src_pcd.points = o3d.utility.Vector3dVector(points0)
+        tgt_pcd.points = o3d.utility.Vector3dVector(points1)
+        src_pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30),
+                                 fast_normal_computation=False)
+        tgt_pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30),
+                                 fast_normal_computation=False)
+        src_pcd.orient_normals_towards_camera_location([0, 0, 0])
+        tgt_pcd.orient_normals_towards_camera_location([0, 0, 0])
+
+
         data_dict['points0'] = points0.astype(np.float32)
         data_dict['points1'] = points1.astype(np.float32)
         data_dict['feats0'] = np.ones((points0.shape[0], 1), dtype=np.float32)
         data_dict['feats1'] = np.ones((points1.shape[0], 1), dtype=np.float32)
         data_dict['transform'] = transform.astype(np.float32)
+        data_dict['normals0'] = np.array(src_pcd.normals).astype(np.float32)
+        data_dict['normals1'] = np.array(tgt_pcd.normals).astype(np.float32)
 
         return data_dict
 
@@ -106,16 +124,20 @@ def threedmatch_kpconv_collate_fn(data_dicts, config, neighborhood_limits):
         new_data_dict['features'] = torch.from_numpy(feats)
 
         points0, points1 = data_dict['points0'], data_dict['points1']
+        normals0, normals1 = data_dict['normals0'], data_dict['normals1']
         points = np.concatenate([points0, points1], axis=0)
+        normals = np.concatenate([normals0, normals1], axis=0)
         lengths = np.array([points0.shape[0], points1.shape[0]])
         stacked_points = torch.from_numpy(points)
+        stacked_normals = torch.from_numpy(normals)
         stacked_lengths = torch.from_numpy(lengths)
 
-        input_points, input_neighbors, input_pools, input_upsamples, input_lengths = generate_input_data(
-            stacked_points, stacked_lengths, config, neighborhood_limits
+        input_points, input_normals, input_neighbors, input_pools, input_upsamples, input_lengths = generate_input_data(
+            stacked_points, stacked_normals, stacked_lengths, config, neighborhood_limits
         )
 
         new_data_dict['points'] = input_points
+        new_data_dict['normals'] = input_normals
         new_data_dict['neighbors'] = input_neighbors
         new_data_dict['pools'] = input_pools
         new_data_dict['upsamples'] = input_upsamples

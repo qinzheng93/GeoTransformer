@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 from IPython import embed
 
 from geotransformer.modules.kpconv.kpfcnn import make_kpfcnn_encoder, make_kpfcnn_decoder, KPEncoder, KPDecoder
@@ -9,7 +10,7 @@ from geotransformer.utils.point_cloud_utils import get_point_to_node_indices_and
 from geotransformer.utils.registration_utils import get_node_corr_indices_and_overlaps
 
 from modules import GeometricTransformerModule, SuperpointMatching, PointMatching, SuperpointTargetGenerator
-
+from information_interactive import InformationInteractive
 
 class Node2Point(nn.Module):
     def __init__(self, config):
@@ -22,17 +23,52 @@ class Node2Point(nn.Module):
         encoder_dict = make_kpfcnn_encoder(config, config.in_features_dim)
         self.encoder = KPEncoder(encoder_dict)
 
+        # bottleneck layer
+        out_dim = config.first_feats_dim
+        # block_i, layer_ind = 0, 0
+        for block in config.architecture:
+            if 'upsample' in block:
+                break
+            # if np.any([skip_block in block for skip_block in ['strided', 'pool']]):
+            #     self.encoder_skips.append(block_i)
+            #     self.encoder_skip_dims.append(in_dim)
+            # self.encoder_blocks.append(block_decider(block_name=block,
+            #                                          radius=r,
+            #                                          in_dim=in_dim,
+            #                                          out_dim=out_dim,
+            #                                          use_bn=config.use_batch_norm,
+            #                                          bn_momentum=config.batch_norm_momentum,
+            #                                          layer_ind=layer_ind,
+            #                                          config=config))
+            #
+            # in_dim = out_dim // 2 if 'simple' in block else out_dim
+            if np.any([skip_block in block for skip_block in ['strided', 'pool']]):
+                # r *= 2
+                out_dim *= 2
+            #     layer_ind += 1
+            # block_i += 1
+        self.bottleneck = nn.Conv1d(out_dim, config.information_interactive_gnn_feats_dim, 1)
+
+        # Information Interactive block
+        self.info_interative = InformationInteractive(layer_names=config.information_interactive_nets,
+                                                      feat_dims=config.information_interactive_gnn_feats_dim,
+                                                      gcn_k=config.information_interactive_dgcnn_k,
+                                                      ppf_k=config.information_interactive_ppf_k,
+                                                      radius=config.first_subsampling_dl * config.information_interactive_radius_mul,
+                                                      bottleneck=config.information_interactive_bottleneck,
+                                                      nhead=config.information_interactive_num_head)
+
         # GNN part
-        self.transformer = GeometricTransformerModule(
-            encoder_dict['out_dim'],
-            config.geometric_transformer_feats_dim,
-            config.geometric_transformer_feats_dim,
-            config.geometric_transformer_num_head,
-            config.geometric_transformer_architecture,
-            config.geometric_transformer_sigma_d,
-            config.geometric_transformer_sigma_a,
-            config.geometric_transformer_angle_k
-        )
+        # self.transformer = GeometricTransformerModule(
+        #     encoder_dict['out_dim'],
+        #     config.geometric_transformer_feats_dim,
+        #     config.geometric_transformer_feats_dim,
+        #     config.geometric_transformer_num_head,
+        #     config.geometric_transformer_architecture,
+        #     config.geometric_transformer_sigma_d,
+        #     config.geometric_transformer_sigma_a,
+        #     config.geometric_transformer_angle_k
+        # )
 
         # KPConv Decoder
         decoder_dict = make_kpfcnn_decoder(config, encoder_dict, encoder_dict['out_dim'], config.final_feats_dim)
@@ -66,6 +102,7 @@ class Node2Point(nn.Module):
         output_dict = {}
 
         feats_f = data_dict['features'].detach()
+        stacked_normals = data_dict['normals']      # 加入法向量
         ref_length_c = data_dict['stack_lengths'][-1][0].item()
         ref_length_m = data_dict['stack_lengths'][1][0].item()
         ref_length_f = data_dict['stack_lengths'][0][0].item()
@@ -95,8 +132,10 @@ class Node2Point(nn.Module):
         _, src_node_masks, src_node_knn_indices, src_node_knn_masks = get_point_to_node_indices_and_masks(
             src_points_m, src_points_c, self.point_to_node_max_point
         )
-
-        sentinel_point = torch.zeros(1, 3).cuda()
+        if torch.cuda.is_available():
+            sentinel_point = torch.zeros(1, 3).cuda()
+        else:
+            sentinel_point = torch.zeros(1, 3)
         ref_padded_points_m = torch.cat([ref_points_m, sentinel_point], dim=0)
         src_padded_points_m = torch.cat([src_points_m, sentinel_point], dim=0)
 
@@ -114,16 +153,23 @@ class Node2Point(nn.Module):
         # 2. KPFCNN Encoder
         feats_c, skip_feats = self.encoder(feats_f, data_dict)
 
-        # 3. Conditional Transformer
-        ref_feats_c = feats_c[:ref_length_c]
-        src_feats_c = feats_c[ref_length_c:]
-        ref_feats_c, src_feats_c = self.transformer(
-            ref_points_c.unsqueeze(0), src_points_c.unsqueeze(0), ref_feats_c.unsqueeze(0), src_feats_c.unsqueeze(0)
-        )
+        # 2.1 bottleneck layer
+        feats_b = self.bottleneck(feats_c.transpose(0, 1).unsqueeze(0))  # (1, gnn_feats_dim, n)
 
+        # 3. Conditional Transformer
+        src_feats_c = feats_b[:, :, ref_length_c:]
+        ref_feats_c = feats_b[:, :, :ref_length_c]
+        normals_src = stacked_normals[-1][ref_length_c:]
+        normals_tgt = stacked_normals[-1][:ref_length_c]
+        # ref_feats_c, src_feats_c = self.transformer(
+        #     ref_points_c.unsqueeze(0), src_points_c.unsqueeze(0), ref_feats_c.unsqueeze(0), src_feats_c.unsqueeze(0)
+        # )
+        ref_feats_c, src_feats_c = self.info_interative(
+            ref_points_c.transpose(0, 1).unsqueeze(0), ref_feats_c, src_points_c.transpose(0, 1).unsqueeze(0), src_feats_c, normals_tgt.transpose(0, 1).unsqueeze(0), normals_src.transpose(0, 1).unsqueeze(0)
+        )
         # 4. Head for coarse level matching
-        ref_feats_c_norm = F.normalize(ref_feats_c.squeeze(0), p=2, dim=1)
-        src_feats_c_norm = F.normalize(src_feats_c.squeeze(0), p=2, dim=1)
+        ref_feats_c_norm = F.normalize(ref_feats_c.transpose(2, 1).squeeze(0), p=2, dim=1)      # 按行标准化
+        src_feats_c_norm = F.normalize(src_feats_c.transpose(2, 1).squeeze(0), p=2, dim=1)
 
         output_dict['ref_feats_c'] = ref_feats_c_norm
         output_dict['src_feats_c'] = src_feats_c_norm
@@ -143,8 +189,8 @@ class Node2Point(nn.Module):
                 ref_feats_c_norm, src_feats_c_norm, ref_node_masks, src_node_masks
             )
 
-            output_dict['ref_node_corr_indices'] = ref_node_corr_indices
-            output_dict['src_node_corr_indices'] = src_node_corr_indices
+            output_dict['ref_node_corr_indices'] = ref_node_corr_indices    # 匹配点的行索引
+            output_dict['src_node_corr_indices'] = src_node_corr_indices    # 匹配点的列索引
 
         # 7 Random select ground truth node correspondences during training
         if self.training:
@@ -160,7 +206,10 @@ class Node2Point(nn.Module):
         ref_node_corr_knn_points = ref_node_knn_points[ref_node_corr_indices]  # (P, K, 3)
         src_node_corr_knn_points = src_node_knn_points[src_node_corr_indices]  # (P, K, 3)
 
-        sentinel_feat = torch.zeros(1, self.final_feats_dim).cuda()
+        if torch.cuda.is_available():
+            sentinel_feat = torch.zeros(1, self.final_feats_dim).cuda()
+        else:
+            sentinel_feat = torch.zeros(1, self.final_feats_dim)
         ref_padded_feats_m = torch.cat([ref_feats_m, sentinel_feat], dim=0)
         src_padded_feats_m = torch.cat([src_feats_m, sentinel_feat], dim=0)
         ref_node_corr_knn_feats = ref_padded_feats_m[ref_node_corr_knn_indices]  # (P, K, C)

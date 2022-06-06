@@ -39,8 +39,7 @@ def batch_grid_subsampling_kpconv(
         s_points, s_len, s_features, s_labels = cpp_subsampling.subsample_batch(
             points, batches_len, features=features, classes=labels, sampleDl=sampleDl, max_p=max_p, verbose=verbose
         )
-        return torch.from_numpy(s_points), torch.from_numpy(s_len), torch.from_numpy(s_features), \
-            torch.from_numpy(s_labels)
+        return torch.from_numpy(s_points), torch.from_numpy(s_len), torch.from_numpy(s_features), torch.from_numpy(s_labels)
 
 
 def batch_neighbors_kpconv(queries, supports, q_batches, s_batches, radius, max_neighbors):
@@ -60,7 +59,7 @@ def batch_neighbors_kpconv(queries, supports, q_batches, s_batches, radius, max_
     return torch.from_numpy(neighbors)
 
 
-def generate_input_data(stacked_points, stacked_lengths, config, neighborhood_limits):
+def generate_input_data(stacked_points, stacked_normals, stacked_lengths, config, neighborhood_limits):
     # Starting radius of convolutions
     radius_normal = config.first_subsampling_dl * config.conv_radius
 
@@ -70,6 +69,7 @@ def generate_input_data(stacked_points, stacked_lengths, config, neighborhood_li
 
     # Lists of inputs
     input_points = []
+    input_normals = []
     input_neighbors = []
     input_pools = []
     input_upsamples = []
@@ -110,7 +110,7 @@ def generate_input_data(stacked_points, stacked_lengths, config, neighborhood_li
             dl = 2 * radius_normal / config.conv_radius
 
             # Subsampled points
-            pool_p, pool_b = batch_grid_subsampling_kpconv(stacked_points, stacked_lengths, sampleDl=dl)
+            pool_p, pool_b, new_normals = batch_grid_subsampling_kpconv(stacked_points, stacked_lengths, stacked_normals, sampleDl=dl)
 
             # Radius of pooled neighbors
             if 'deformable' in block:
@@ -136,6 +136,7 @@ def generate_input_data(stacked_points, stacked_lengths, config, neighborhood_li
 
         # Updating input lists
         input_points += [stacked_points.float()]
+        input_normals += [stacked_normals.float()]
         input_neighbors += [conv_i.long()]
         input_pools += [pool_i.long()]
         input_upsamples += [up_i.long()]
@@ -144,13 +145,14 @@ def generate_input_data(stacked_points, stacked_lengths, config, neighborhood_li
         # New points for next layer
         stacked_points = pool_p
         stacked_lengths = pool_b
+        stacked_normals = new_normals
 
         # Update radius and reset blocks
         radius_normal *= 2
         layer += 1
         layer_blocks = []
 
-    return input_points, input_neighbors, input_pools, input_upsamples, input_batches_len
+    return input_points,  input_normals, input_neighbors, input_pools, input_upsamples, input_batches_len
 
 
 def generate_input_data_gpu(stacked_points, stacked_lengths, config, neighborhood_limits):

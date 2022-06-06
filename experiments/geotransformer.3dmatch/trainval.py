@@ -1,7 +1,7 @@
 import argparse
 import os
 import os.path as osp
-import time
+import time,sys
 
 import torch
 import torch.nn as nn
@@ -9,6 +9,7 @@ import torch.optim as optim
 import numpy as np
 from IPython import embed
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from geotransformer.engine import Engine
 from geotransformer.utils.metrics import Timer, StatisticsDictMeter
 from geotransformer.utils.torch_utils import to_cuda, all_reduce_dict
@@ -21,7 +22,7 @@ from loss import OverallLoss, Evaluator
 
 def make_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--steps', metavar='N', type=int, default=10, help='iteration steps for logging')
+    parser.add_argument('--steps', metavar='N', type=int, default=100, help='iteration steps for logging')
     return parser
 
 
@@ -57,7 +58,8 @@ def run_one_epoch(
 
     num_iter_per_epoch = len(data_loader)
     for i, data_dict in enumerate(data_loader):
-        data_dict = to_cuda(data_dict)
+        if torch.cuda.is_available():
+            data_dict = to_cuda(data_dict)
 
         timer.add_prepare_time()
 
@@ -75,7 +77,7 @@ def run_one_epoch(
         accepted = result_dict['RRE'] < 15. and result_dict['RTE'] < 0.3
         result_meter.update('RR', float(accepted))
 
-        if training:
+        if training:   # 迭代参数回传
             loss = loss_dict['loss']
 
             loss_dict = {key: value.item() for key, value in loss_dict.items()}
@@ -107,7 +109,7 @@ def run_one_epoch(
 
         if training:
             engine.step()
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
 
     message = 'Epoch {}, '.format(epoch + 1)
     if training:
@@ -135,15 +137,24 @@ def main():
         engine.logger.info(message)
         message = 'Data loader created: {:.3f}s collapsed.'.format(loading_time)
         engine.logger.info(message)
-
-        model = create_model(config).cuda()
-        optimizer = optim.Adam(
-            model.parameters(),
-            lr=config.learning_rate * engine.world_size,
-            weight_decay=config.weight_decay
-        )
-        loss_func = OverallLoss(config).cuda()
-        evaluator = Evaluator(config).cuda()
+        if not torch.cuda.is_available():
+            model = create_model(config)
+            optimizer = optim.Adam(
+                model.parameters(),
+                lr=config.learning_rate * engine.world_size,
+                weight_decay=config.weight_decay
+            )
+            loss_func = OverallLoss(config)
+            evaluator = Evaluator(config)
+        else:
+            model = create_model(config).cuda()
+            optimizer = optim.Adam(
+                model.parameters(),
+                lr=config.learning_rate * engine.world_size,
+                weight_decay=config.weight_decay
+            )
+            loss_func = OverallLoss(config).cuda()
+            evaluator = Evaluator(config).cuda()
 
         engine.register_state(model=model, optimizer=optimizer)
 

@@ -41,8 +41,12 @@ def weighted_procrustes(src_points, tgt_points, weights=None, weight_thresh=0., 
 
     H = src_points_centered.permute(0, 2, 1) @ (weights * tgt_points_centered)
     U, _, V = torch.svd(H.cpu())  # H = USV^T
-    Ut, V = U.transpose(1, 2).cuda(), V.cuda()
-    eye = torch.eye(3).unsqueeze(0).repeat(batch_size, 1, 1).cuda()
+    if torch.cuda.is_available():
+        Ut, V = U.transpose(1, 2).cuda(), V.cuda()
+        eye = torch.eye(3).unsqueeze(0).repeat(batch_size, 1, 1).cuda()
+    else:
+        Ut, V = U.transpose(1, 2), V
+        eye = torch.eye(3).unsqueeze(0).repeat(batch_size, 1, 1)
     eye[:, -1, -1] = torch.sign(torch.det(V @ Ut))
     R = V @ eye @ Ut
 
@@ -50,7 +54,10 @@ def weighted_procrustes(src_points, tgt_points, weights=None, weight_thresh=0., 
     t = t.squeeze(2)
 
     if return_transform:
-        transform = torch.eye(4).unsqueeze(0).repeat(batch_size, 1, 1).cuda()
+        if torch.cuda.is_available():
+            transform = torch.eye(4).unsqueeze(0).repeat(batch_size, 1, 1).cuda()
+        else:
+            transform = torch.eye(4).unsqueeze(0).repeat(batch_size, 1, 1)
         transform[:, :3, :3] = R
         transform[:, :3, 3] = t
         if squeeze_first:

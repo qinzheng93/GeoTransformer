@@ -116,7 +116,10 @@ def random_sample_from_scores(scores, size, replace=False):
     probs = probs.detach().cpu().numpy()
     indices = np.arange(scores.shape[0])
     sel_indices = np.random.choice(indices, size=size, p=probs, replace=replace)
-    sel_indices = torch.from_numpy(sel_indices).cuda()
+    if torch.cuda.is_available():
+        sel_indices = torch.from_numpy(sel_indices).cuda()
+    else:
+        sel_indices = torch.from_numpy(sel_indices)
     return sel_indices
 
 

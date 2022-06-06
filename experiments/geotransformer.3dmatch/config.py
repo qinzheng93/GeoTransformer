@@ -21,7 +21,8 @@ config.snapshot_dir = osp.join(config.output_dir, 'snapshots')
 config.logs_dir = osp.join(config.output_dir, 'logs')
 config.features_dir = osp.join(config.output_dir, 'features')
 config.registration_dir = osp.join(config.output_dir, 'registration')
-config.dataset_root = osp.join(config.root_dir, 'data', '3DMatch')
+# config.dataset_root = osp.join(config.root_dir, 'data', '3DMatch')
+config.dataset_root = f'/root/aiyang/Coarse-to-fine-correspondences/scripts'
 
 ensure_dir(config.output_dir)
 ensure_dir(config.snapshot_dir)
@@ -104,13 +105,22 @@ config.point_matching_min_num_corr = 3
 config.point_matching_max_num_corr = 1500
 config.point_matching_num_registration_iter = 5
 
-# model - Coarse level
-config.geometric_transformer_feats_dim = 256
-config.geometric_transformer_num_head = 4
-config.geometric_transformer_architecture = ['self', 'cross', 'self', 'cross', 'self', 'cross']
-config.geometric_transformer_sigma_d = 0.2
-config.geometric_transformer_sigma_a = 15
-config.geometric_transformer_angle_k = 3
+# # model - Coarse level
+# config.geometric_transformer_feats_dim = 256
+# config.geometric_transformer_num_head = 4
+# config.geometric_transformer_architecture = ['self', 'cross', 'self', 'cross', 'self', 'cross']
+# config.geometric_transformer_sigma_d = 0.2
+# config.geometric_transformer_sigma_a = 15
+# config.geometric_transformer_angle_k = 3
+
+# model - information_interactive
+config.information_interactive_nets = ['gge','cross_attn','gge']
+config.information_interactive_gnn_feats_dim = 256
+config.information_interactive_dgcnn_k = 10
+config.information_interactive_ppf_k = 64
+config.information_interactive_radius_mul = 32
+config.information_interactive_bottleneck = False
+config.information_interactive_num_head = 4
 
 # loss - Coarse level
 config.overlap_aware_circle_loss_positive_margin = 0.1

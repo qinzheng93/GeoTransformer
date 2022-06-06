@@ -26,30 +26,42 @@ class LearnableLogOptimalTransport(nn.Module):
         :return matching_scores: torch.Tensor (B, M+1, N+1)
         """
         batch_size, num_row, num_col = scores.shape
-        ninf = torch.tensor(-self.inf).cuda()
-
-        padded_row_masks = torch.zeros(batch_size, num_row + 1, dtype=torch.bool).cuda()
-        padded_row_masks[:, :num_row] = ~row_masks
-        padded_col_masks = torch.zeros(batch_size, num_col + 1, dtype=torch.bool).cuda()
-        padded_col_masks[:, :num_col] = ~col_masks
+        if torch.cuda.is_available():
+            ninf = torch.tensor(-self.inf).cuda()
+            padded_row_masks = torch.zeros(batch_size, num_row + 1, dtype=torch.bool).cuda()
+            padded_row_masks[:, :num_row] = ~row_masks
+            padded_col_masks = torch.zeros(batch_size, num_col + 1, dtype=torch.bool).cuda()
+            padded_col_masks[:, :num_col] = ~col_masks
+        else:
+            ninf = torch.tensor(-self.inf)
+            padded_row_masks = torch.zeros(batch_size, num_row + 1, dtype=torch.bool)
+            padded_row_masks[:, :num_row] = ~row_masks
+            padded_col_masks = torch.zeros(batch_size, num_col + 1, dtype=torch.bool)
+            padded_col_masks[:, :num_col] = ~col_masks
 
         padded_col = self.alpha.expand(batch_size, num_row, 1)
         padded_row = self.alpha.expand(batch_size, 1, num_col + 1)
         padded_scores = torch.cat([torch.cat([scores, padded_col], dim=-1), padded_row], dim=1)
 
-        padded_score_masks = torch.logical_or(padded_row_masks.unsqueeze(2), padded_col_masks.unsqueeze(1))
+        padded_score_masks = torch.logical_or(padded_row_masks.unsqueeze(2), padded_col_masks.unsqueeze(1)) # 逻辑或运算
         padded_scores[padded_score_masks] = ninf
 
         num_valid_row = row_masks.float().sum(1)
         num_valid_col = col_masks.float().sum(1)
         norm = -torch.log(num_valid_row + num_valid_col)  # (B,)
 
-        log_mu = torch.empty(batch_size, num_row + 1).cuda()
+        if torch.cuda.is_available():
+            log_mu = torch.empty(batch_size, num_row + 1).cuda()
+        else:
+            log_mu = torch.empty(batch_size, num_row + 1)
         log_mu[:, :num_row] = norm.unsqueeze(1)
         log_mu[:, num_row] = torch.log(num_valid_col) + norm
         log_mu[padded_row_masks] = ninf
 
-        log_nu = torch.empty(batch_size, num_col + 1).cuda()
+        if torch.cuda.is_available():
+            log_nu = torch.empty(batch_size, num_col + 1).cuda()
+        else:
+            log_nu = torch.empty(batch_size, num_col + 1)
         log_nu[:, :num_col] = norm.unsqueeze(1)
         log_nu[:, num_col] = torch.log(num_valid_row) + norm
         log_nu[padded_col_masks] = ninf

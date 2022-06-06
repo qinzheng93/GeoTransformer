@@ -103,7 +103,10 @@ class SuperpointTargetGenerator(nn.Module):
         if gt_corr_indices.shape[0] > self.num_corr:
             indices = np.arange(gt_corr_indices.shape[0])
             sel_indices = np.random.choice(indices, self.num_corr, replace=False)
-            sel_indices = torch.from_numpy(sel_indices).cuda()
+            if torch.cuda.is_available():
+                sel_indices = torch.from_numpy(sel_indices).cuda()
+            else:
+                sel_indices = torch.from_numpy(sel_indices)
             gt_ref_corr_indices = index_select(gt_ref_corr_indices, sel_indices, dim=0)
             gt_src_corr_indices = index_select(gt_src_corr_indices, sel_indices, dim=0)
             gt_corr_overlaps = index_select(gt_corr_overlaps, sel_indices, dim=0)
@@ -125,19 +128,19 @@ class SuperpointMatching(nn.Module):
         # remove empty patch
         ref_indices = torch.nonzero(ref_masks, as_tuple=True)[0]
         src_indices = torch.nonzero(src_masks, as_tuple=True)[0]
-        ref_feats = index_select(ref_feats, ref_indices, dim=0)
-        src_feats = index_select(src_feats, src_indices, dim=0)
+        ref_feats = index_select(ref_feats, ref_indices, dim=0)   # 非0的ref特征(N, C)
+        src_feats = index_select(src_feats, src_indices, dim=0)   # 非0的src特征(M, C)
         # select top-k proposals
-        matching_scores = torch.exp(-pairwise_distance(ref_feats, src_feats, normalized=True))
+        matching_scores = torch.exp(-pairwise_distance(ref_feats, src_feats, normalized=True))   # (N, M)特征距离，经过正则化，exp后的矩阵
         if self.dual_normalization:
-            ref_matching_scores = matching_scores / matching_scores.sum(dim=1, keepdim=True)
+            ref_matching_scores = matching_scores / matching_scores.sum(dim=1, keepdim=True)   # dual正则化行
             src_matching_scores = matching_scores / matching_scores.sum(dim=0, keepdim=True)
             matching_scores = ref_matching_scores * src_matching_scores
-        corr_scores, corr_indices = matching_scores.view(-1).topk(k=self.num_proposal, largest=True)
+        corr_scores, corr_indices = matching_scores.view(-1).topk(k=self.num_proposal, largest=True)   # (N, M)矩阵中最大的K(256)个
         ref_sel_indices = corr_indices // matching_scores.shape[1]
         src_sel_indices = corr_indices % matching_scores.shape[1]
         # recover original superpoint indices
-        ref_corr_indices = index_select(ref_indices, ref_sel_indices, dim=0)
+        ref_corr_indices = index_select(ref_indices, ref_sel_indices, dim=0)   # 从ref_indices中选择ref_sel_indices序列
         src_corr_indices = index_select(src_indices, src_sel_indices, dim=0)
 
         return ref_corr_indices, src_corr_indices, corr_scores
@@ -172,18 +175,27 @@ class PointMatching(nn.Module):
         corr_mask_map = torch.logical_and(ref_knn_masks.unsqueeze(2), src_knn_masks.unsqueeze(1))
 
         num_proposal, ref_length, src_length = matching_score_map.shape
-        proposal_indices = torch.arange(num_proposal).cuda()
-
+        if torch.cuda.is_available():
+            proposal_indices = torch.arange(num_proposal).cuda()
+        else:
+            proposal_indices = torch.arange(num_proposal)
         ref_topk_scores, ref_topk_indices = matching_score_map.topk(k=self.k, dim=2)  # (B, N, K)
         ref_proposal_indices = proposal_indices.view(num_proposal, 1, 1).expand(num_proposal, ref_length, self.k)
-        ref_indices = torch.arange(ref_length).cuda().view(1, ref_length, 1).expand(num_proposal, ref_length, self.k)
+        if torch.cuda.is_available():
+            ref_indices = torch.arange(ref_length).cuda().view(1, ref_length, 1).expand(num_proposal, ref_length, self.k)
+        else:
+            ref_indices = torch.arange(ref_length).view(1, ref_length, 1).expand(num_proposal, ref_length, self.k)
+
         ref_score_map = torch.zeros_like(matching_score_map)
         ref_score_map[ref_proposal_indices, ref_indices, ref_topk_indices] = ref_topk_scores
         ref_corr_map = torch.logical_and(torch.gt(ref_score_map, self.threshold), corr_mask_map)
 
         src_topk_scores, src_topk_indices = matching_score_map.topk(k=self.k, dim=1)  # (B, K, N)
         src_proposal_indices = proposal_indices.view(num_proposal, 1, 1).expand(num_proposal, self.k, src_length)
-        src_indices = torch.arange(src_length).cuda().view(1, 1, src_length).expand(num_proposal, self.k, src_length)
+        if torch.cuda.is_available():
+            src_indices = torch.arange(src_length).cuda().view(1, 1, src_length).expand(num_proposal, self.k, src_length)
+        else:
+            src_indices = torch.arange(src_length).view(1, 1, src_length).expand(num_proposal, self.k, src_length)
         src_score_map = torch.zeros_like(matching_score_map)
         src_score_map[src_proposal_indices, src_topk_indices, src_indices] = src_topk_scores
         src_corr_map = torch.logical_and(torch.gt(src_score_map, self.threshold), corr_mask_map)
@@ -216,31 +228,48 @@ class PointMatching(nn.Module):
 
         # torch.nonzero is row-major, so the correspondences from the same proposal are consecutive.
         # find the first occurrence of each proposal index, then the chunk of this proposal can be obtained.
-        unique_masks = torch.ne(proposal_indices[1:], proposal_indices[:-1])
-        unique_indices = torch.nonzero(unique_masks, as_tuple=True)[0] + 1
+        unique_masks = torch.ne(proposal_indices[1:], proposal_indices[:-1])    # ne不等于函数，找到匹配的nodes中第一个的索引
+        unique_indices = torch.nonzero(unique_masks, as_tuple=True)[0] + 1    # 返回非0的索引
         unique_indices = unique_indices.detach().cpu().numpy().tolist()
         unique_indices = [0] + unique_indices + [proposal_indices.shape[0]]
-        chunks = [(x, y) for x, y in zip(unique_indices[:-1], unique_indices[1:]) if y - x >= self.min_num_corr]
+        chunks = [(x, y) for x, y in zip(unique_indices[:-1], unique_indices[1:]) if y - x >= self.min_num_corr]   # zip按照node的配对进行遍历
         num_proposal = len(chunks)
         if num_proposal > 0:
-            indices = torch.cat([torch.arange(x, y) for x, y in chunks], dim=0).cuda()
-            stacked_ref_corr_points = index_select(all_ref_corr_points, indices, dim=0)  # (total, 3)
+            if torch.cuda.is_available():
+                indices = torch.cat([torch.arange(x, y) for x, y in chunks], dim=0).cuda()
+            else:
+                indices = torch.cat([torch.arange(x, y) for x, y in chunks], dim=0)
+            stacked_ref_corr_points = index_select(all_ref_corr_points, indices, dim=0)  # (total, 3)    # 筛选过node中points匹配数不足k（3）的node，找到node的points
             stacked_src_corr_points = index_select(all_src_corr_points, indices, dim=0)  # (total, 3)
             stacked_corr_scores = index_select(all_corr_scores, indices, dim=0)  # (total,)
 
-            max_corr = np.max([y - x for x, y in chunks])
-            target_chunks = [(i * max_corr, i * max_corr + y - x) for i, (x, y) in enumerate(chunks)]
-            indices = torch.cat([torch.arange(x, y) for x, y in target_chunks], dim=0).cuda()
+            max_corr = np.max([y - x for x, y in chunks])              # 找到node中points最多的那一个
+            target_chunks = [(i * max_corr, i * max_corr + y - x) for i, (x, y) in enumerate(chunks)]   # zip按照筛选过后node的配对进行遍历
+            if torch.cuda.is_available():
+                indices = torch.cat([torch.arange(x, y) for x, y in target_chunks], dim=0).cuda()
+            else:
+                indices = torch.cat([torch.arange(x, y) for x, y in target_chunks], dim=0)
             indices0 = indices.unsqueeze(1).expand(indices.shape[0], 3)  # (total, 3)
-            indices1 = torch.arange(3).unsqueeze(0).expand(indices.shape[0], 3).cuda()  # (total, 3)
+            if torch.cuda.is_available():
+                indices1 = torch.arange(3).unsqueeze(0).expand(indices.shape[0], 3).cuda()  # (total, 3)
 
-            local_ref_corr_points = torch.zeros(num_proposal * max_corr, 3).cuda()
+                local_ref_corr_points = torch.zeros(num_proposal * max_corr, 3).cuda()
+            else:
+                indices1 = torch.arange(3).unsqueeze(0).expand(indices.shape[0], 3)
+
+                local_ref_corr_points = torch.zeros(num_proposal * max_corr, 3)
             local_ref_corr_points.index_put_([indices0, indices1], stacked_ref_corr_points)
             local_ref_corr_points = local_ref_corr_points.view(num_proposal, max_corr, 3)
-            local_src_corr_points = torch.zeros(num_proposal * max_corr, 3).cuda()
-            local_src_corr_points.index_put_([indices0, indices1], stacked_src_corr_points)
-            local_src_corr_points = local_src_corr_points.view(num_proposal, max_corr, 3)
-            local_corr_scores = torch.zeros(num_proposal * max_corr).cuda()
+            if torch.cuda.is_available():
+                local_src_corr_points = torch.zeros(num_proposal * max_corr, 3).cuda()
+                local_src_corr_points.index_put_([indices0, indices1], stacked_src_corr_points)
+                local_src_corr_points = local_src_corr_points.view(num_proposal, max_corr, 3)
+                local_corr_scores = torch.zeros(num_proposal * max_corr).cuda()
+            else:
+                local_src_corr_points = torch.zeros(num_proposal * max_corr, 3)
+                local_src_corr_points.index_put_([indices0, indices1], stacked_src_corr_points)
+                local_src_corr_points = local_src_corr_points.view(num_proposal, max_corr, 3)
+                local_corr_scores = torch.zeros(num_proposal * max_corr)
             local_corr_scores.index_put_([indices], stacked_corr_scores)
             local_corr_scores = local_corr_scores.view(num_proposal, max_corr)
 
@@ -248,9 +277,9 @@ class PointMatching(nn.Module):
             all_aligned_src_corr_points = apply_transform(src_corr_points.unsqueeze(0), estimated_transforms)
             all_corr_distances = torch.sum((ref_corr_points.unsqueeze(0) - all_aligned_src_corr_points) ** 2, dim=2)
             all_inlier_masks = torch.lt(all_corr_distances, self.matching_radius ** 2)  # (P, N)
-            best_index = all_inlier_masks.sum(dim=1).argmax()
+            best_index = all_inlier_masks.sum(dim=1).argmax()   # 筛选最好的node
             inlier_masks = all_inlier_masks[best_index].float()
-            estimated_transform = estimated_transforms[best_index]
+            # estimated_transform = estimated_transforms[best_index]
         else:
             estimated_transform = self.procrustes(src_corr_points, ref_corr_points, corr_scores)
             aligned_src_corr_points = apply_transform(src_corr_points, estimated_transform)

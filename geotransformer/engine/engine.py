@@ -50,27 +50,33 @@ class Engine:
 
         # cuda and distributed
         # os.environ['CUDA_VISIBLE_DEVICES'] = self.args.devices
-        if not torch.cuda.is_available():
-            raise RuntimeError('No CUDA devices available.')
-        self.distributed = self.args.local_rank != -1
-        if self.distributed:
-            torch.cuda.set_device(self.args.local_rank)
-            dist.init_process_group(backend='nccl')
-            self.world_size = dist.get_world_size()
-            self.local_rank = self.args.local_rank
-            self.data_parallel = False
-            self.logger.info('Using DistributedDataParallel mode (world_size {})'.format(self.world_size))
+        if torch.cuda.is_available():
+            # raise RuntimeError('No CUDA devices available.')
+            self.distributed = self.args.local_rank != -1
+            if self.distributed:
+                torch.cuda.set_device(self.args.local_rank)
+                dist.init_process_group(backend='nccl')
+                self.world_size = dist.get_world_size()
+                self.local_rank = self.args.local_rank
+                self.data_parallel = False
+                self.logger.info('Using DistributedDataParallel mode (world_size {})'.format(self.world_size))
+            else:
+                self.world_size = 1
+                self.local_rank = 0
+                self.num_device = torch.cuda.device_count()
+                self.data_parallel = self.num_device > 1
+                if self.data_parallel:
+                    self.logger.info('Using DataParallel mode ({} GPUs available).'.format(self.num_device))
+                    self.logger.warning('DataParallel will be deprecated. Use DistributedDataParallel instead.')
+                else:
+                    self.logger.info('Using Single-GPU mode.')
         else:
+            self.distributed = self.args.local_rank != -1
             self.world_size = 1
             self.local_rank = 0
             self.num_device = torch.cuda.device_count()
             self.data_parallel = self.num_device > 1
-            if self.data_parallel:
-                self.logger.info('Using DataParallel mode ({} GPUs available).'.format(self.num_device))
-                self.logger.warning('DataParallel will be deprecated. Use DistributedDataParallel instead.')
-            else:
-                self.logger.info('Using Single-GPU mode.')
-
+            self.logger.info('Using CPU mode.')
         self.cudnn_deterministic = cudnn_deterministic
         self.autograd_anomaly_detection = autograd_anomaly_detection
 
@@ -85,7 +91,8 @@ class Engine:
         if self.parser is None:
             self.parser = argparse.ArgumentParser()
         # self.parser.add_argument('--devices', metavar='GPUs', required=True, help='devices to use')
-        self.parser.add_argument('--snapshot', metavar='F', default=None, help='load from snapshot')
+        # self.parser.add_argument('--snapshot', metavar='F', default=None, help='load from snapshot')
+        self.parser.add_argument('--snapshot', metavar='F', default="/root/aiyang/GeoTransformer/output/geotransformer.3dmatch/snapshots/epoch-15.pth.tar", help='load from snapshot')
         self.parser.add_argument('--local_rank', metavar='R', type=int, default=-1, help='local rank for ddp')
 
     def initialize(self):
@@ -124,7 +131,7 @@ class Engine:
         self.logger.info('Snapshot saved to "{}"'.format(file_path))
 
     def load_snapshot(self, snapshot, only_model=False, fix_prefix=True):
-        state_dict = torch.load(snapshot, map_location=torch.device('cpu'))
+        state_dict = torch.load(snapshot, map_location=torch.device('cpu'))    # 导入snapshot将信息传入state_dict
 
         self.logger.info('Loading from "{}".'.format(snapshot))
 
@@ -145,8 +152,9 @@ class Engine:
                 self.state.iteration = state_dict['iteration']
                 self.logger.info('Iteration has been loaded: {}.'.format(iteration))
 
-            if 'optimizer' in state_dict and self.state.optimizer is not None:
-                self.state.optimizer.load_state_dict(state_dict['optimizer'])
+            if 'optimizer' in state_dict: # and self.state.optimizer is not None:
+                # self.state.optimizer.load_state_dict(state_dict['optimizer'])
+                self.state.optimizer = state_dict['optimizer']
                 self.logger.info('Optimizer has been loaded.')
 
         self.logger.info('Snapshot loaded.')

@@ -78,10 +78,13 @@ def get_point_to_node(points, nodes, return_counts=False):
     """
     if isinstance(points, torch.Tensor):
         distances = pairwise_distance(points, nodes)
-        indices = distances.min(dim=1)[1]
+        indices = distances.min(dim=1)[1]    # 取每个点最近的node的索引
         if return_counts:
-            unique_indices, unique_counts = torch.unique(indices, return_counts=True)
-            node_sizes = torch.zeros(nodes.shape[0], dtype=torch.long).cuda()
+            unique_indices, unique_counts = torch.unique(indices, return_counts=True)   # 去除重复数据 返回node的索引以及node的个数
+            if torch.cuda.is_available():
+                node_sizes = torch.zeros(nodes.shape[0], dtype=torch.long).cuda()
+            else:
+                node_sizes = torch.zeros(nodes.shape[0], dtype=torch.long)
             node_sizes[unique_indices] = unique_counts
             return indices, node_sizes
         else:
@@ -133,12 +136,15 @@ def get_point_to_node_indices_and_masks(points, nodes, num_sample, return_counts
     :return node_knn_masks: torch.BoolTensor (num_node, max_point)
     """
     point_to_node, node_sizes = get_point_to_node(points, nodes, return_counts=True)
-    node_masks = torch.gt(node_sizes, 0)
+    node_masks = torch.gt(node_sizes, 0)      # torch.gt(input,other)比较input>other的数据，返回bool
 
     node_knn_indices = get_knn_indices(points, nodes, num_sample)  # (num_node, max_point)
-    node_indices = torch.arange(nodes.shape[0]).cuda().unsqueeze(1).expand(-1, num_sample)
+    if torch.cuda.is_available():
+        node_indices = torch.arange(nodes.shape[0]).cuda().unsqueeze(1).expand(-1, num_sample)
+    else:
+        node_indices = torch.arange(nodes.shape[0]).unsqueeze(1).expand(-1, num_sample)
     node_knn_masks = torch.eq(point_to_node[node_knn_indices], node_indices)
-    sentinel_indices = torch.full_like(node_knn_indices, points.shape[0])
+    sentinel_indices = torch.full_like(node_knn_indices, points.shape[0])  # 返回一个与node_knn_indices一样size，值为points.shape[0]
     node_knn_indices = torch.where(node_knn_masks, node_knn_indices, sentinel_indices)
 
     if return_counts:
