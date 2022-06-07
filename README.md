@@ -229,13 +229,13 @@ Change the arguments `src_file`, `ref_file` and `gt` to your own data, where `sr
 ## Citation
 
 ```bibtex
-@misc{qin2022geometric,
-      title={Geometric Transformer for Fast and Robust Point Cloud Registration},
-      author={Zheng Qin and Hao Yu and Changjian Wang and Yulan Guo and Yuxing Peng and Kai Xu},
-      year={2022},
-      eprint={2202.06688},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV}
+@inproceedings{qin2022geometric,
+    title={Geometric Transformer for Fast and Robust Point Cloud Registration},
+    author={Zheng Qin and Hao Yu and Changjian Wang and Yulan Guo and Yuxing Peng and Kai Xu},
+    booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+    month={June},
+    year={2022},
+    pages={11143-11152}
 }
 ```
 
