@@ -16,10 +16,10 @@ _C.seed = 7351
 _C.working_dir = osp.dirname(osp.realpath(__file__))
 _C.root_dir = osp.dirname(osp.dirname(_C.working_dir))
 _C.exp_name = osp.basename(_C.working_dir)
-_C.output_dir = osp.join(_C.root_dir, 'output', _C.exp_name)
-_C.snapshot_dir = osp.join(_C.output_dir, 'snapshots')
-_C.log_dir = osp.join(_C.output_dir, 'logs')
-_C.event_dir = osp.join(_C.output_dir, 'events')
+_C.output_dir = osp.join(_C.root_dir, "output", _C.exp_name)
+_C.snapshot_dir = osp.join(_C.output_dir, "snapshots")
+_C.log_dir = osp.join(_C.output_dir, "logs")
+_C.event_dir = osp.join(_C.output_dir, "events")
 
 ensure_dir(_C.output_dir)
 ensure_dir(_C.snapshot_dir)
@@ -28,13 +28,13 @@ ensure_dir(_C.event_dir)
 
 # data
 _C.data = edict()
-_C.data.dataset_root = osp.join(_C.root_dir, 'data', 'ModelNet')
+_C.data.dataset_root = osp.join(_C.root_dir, "data", "ModelNet")
 _C.data.num_points = 717
 _C.data.voxel_size = None
-_C.data.rotation_magnitude = 180.0
+_C.data.rotation_magnitude = 45.0
 _C.data.translation_magnitude = 0.5
 _C.data.keep_ratio = 0.7
-_C.data.crop_method = 'plane'
+_C.data.crop_method = "plane"
 _C.data.asymmetric = True
 _C.data.twice_sample = True
 _C.data.twice_transform = False
@@ -44,14 +44,14 @@ _C.train = edict()
 _C.train.batch_size = 1
 _C.train.num_workers = 8
 _C.train.noise_magnitude = 0.05
-_C.train.class_indices = 'all'
+_C.train.class_indices = "all"
 
 # test data
 _C.test = edict()
 _C.test.batch_size = 1
 _C.test.num_workers = 8
 _C.test.noise_magnitude = 0.05
-_C.test.class_indices = 'all'
+_C.test.class_indices = "all"
 
 # evaluation
 _C.eval = edict()
@@ -111,11 +111,11 @@ _C.geotransformer.input_dim = 512
 _C.geotransformer.hidden_dim = 256
 _C.geotransformer.output_dim = 256
 _C.geotransformer.num_heads = 4
-_C.geotransformer.blocks = ['self', 'cross', 'self', 'cross', 'self', 'cross']
+_C.geotransformer.blocks = ["self", "cross", "self", "cross", "self", "cross"]
 _C.geotransformer.sigma_d = 0.2
 _C.geotransformer.sigma_a = 15
 _C.geotransformer.angle_k = 3
-_C.geotransformer.reduction_a = 'max'
+_C.geotransformer.reduction_a = "max"
 
 # model - Fine Matching
 _C.fine_matching = edict()
@@ -154,7 +154,7 @@ def make_cfg():
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--link_output', dest='link_output', action='store_true', help='link output dir')
+    parser.add_argument("--link_output", dest="link_output", action="store_true", help="link output dir")
     args = parser.parse_args()
     return args
 
@@ -163,8 +163,8 @@ def main():
     args = parse_args()
     cfg = make_cfg()
     if args.link_output:
-        os.symlink(cfg.output_dir, 'output')
+        os.symlink(cfg.output_dir, "output")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
