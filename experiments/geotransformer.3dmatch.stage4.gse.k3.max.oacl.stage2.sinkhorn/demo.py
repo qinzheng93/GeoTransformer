@@ -59,11 +59,15 @@ def main():
     state_dict = torch.load(args.weights)
     model.load_state_dict(state_dict["model"])
 
+    # switch to eval mode
+    model.eval()
+    
     # prediction
-    data_dict = to_cuda(data_dict)
-    output_dict = model(data_dict)
-    data_dict = release_cuda(data_dict)
-    output_dict = release_cuda(output_dict)
+    with torch.no_grad():
+        data_dict = to_cuda(data_dict)
+        output_dict = model(data_dict)
+        data_dict = release_cuda(data_dict)
+        output_dict = release_cuda(output_dict)
 
     # get results
     ref_points = output_dict["ref_points"]
