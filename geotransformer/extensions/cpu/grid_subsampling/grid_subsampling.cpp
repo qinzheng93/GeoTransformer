@@ -23,11 +23,11 @@ std::vector<at::Tensor> grid_subsampling(
   );
   std::vector<PointXYZ> vec_s_points;
 
-  std::vector<long> vec_lengths = std::vector<long>(
-    lengths.data_ptr<long>(),
-    lengths.data_ptr<long>() + batch_size
+  std::vector<int64_t> vec_lengths = std::vector<int64_t>(
+    lengths.data_ptr<int64_t>(),
+    lengths.data_ptr<int64_t>() + batch_size
   );
-  std::vector<long> vec_s_lengths;
+  std::vector<int64_t> vec_s_lengths;
 
   grid_subsampling_cpu(
     vec_points,
@@ -39,11 +39,11 @@ std::vector<at::Tensor> grid_subsampling(
 
   std::size_t total_s_points = vec_s_points.size();
   at::Tensor s_points = torch::zeros(
-    {total_s_points, 3},
+    {static_cast<int64_t>(total_s_points), 3},
     at::device(points.device()).dtype(at::ScalarType::Float)
   );
   at::Tensor s_lengths = torch::zeros(
-    {batch_size},
+    {static_cast<int64_t>(batch_size)},
     at::device(lengths.device()).dtype(at::ScalarType::Long)
   );
 
@@ -53,9 +53,9 @@ std::vector<at::Tensor> grid_subsampling(
     sizeof(float) * total_s_points * 3
   );
   std::memcpy(
-    s_lengths.data_ptr<long>(),
+    s_lengths.data_ptr<int64_t>(),
     vec_s_lengths.data(),
-    sizeof(long) * batch_size
+    sizeof(int64_t) * batch_size
   );
 
   return {s_points, s_lengths};
