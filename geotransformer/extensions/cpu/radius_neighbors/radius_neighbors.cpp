@@ -34,13 +34,13 @@ at::Tensor radius_neighbors(
     reinterpret_cast<PointXYZ*>(s_points.data_ptr<float>()),
     reinterpret_cast<PointXYZ*>(s_points.data_ptr<float>()) + total_s_points
   );
-  std::vector<long> vec_q_lengths = std::vector<long>(
-    q_lengths.data_ptr<long>(), q_lengths.data_ptr<long>() + batch_size
+  std::vector<int64_t> vec_q_lengths = std::vector<int64_t>(
+    q_lengths.data_ptr<int64_t>(), q_lengths.data_ptr<int64_t>() + batch_size
   );
-  std::vector<long> vec_s_lengths = std::vector<long>(
-    s_lengths.data_ptr<long>(), s_lengths.data_ptr<long>() + batch_size
+  std::vector<int64_t> vec_s_lengths = std::vector<int64_t>(
+    s_lengths.data_ptr<int64_t>(), s_lengths.data_ptr<int64_t>() + batch_size
   );
-  std::vector<long> vec_neighbor_indices;
+  std::vector<int64_t> vec_neighbor_indices;
 
   radius_neighbors_cpu(
     vec_q_points,
@@ -54,14 +54,14 @@ at::Tensor radius_neighbors(
   std::size_t max_neighbors = vec_neighbor_indices.size() / total_q_points;
 
   at::Tensor neighbor_indices = torch::zeros(
-    {total_q_points, max_neighbors},
+    {static_cast<int64_t>(total_q_points), static_cast<int64_t>(max_neighbors)},
     at::device(q_points.device()).dtype(at::ScalarType::Long)
   );
 
   std::memcpy(
-    neighbor_indices.data_ptr<long>(),
+    neighbor_indices.data_ptr<int64_t>(),
     vec_neighbor_indices.data(),
-    sizeof(long) * total_q_points * max_neighbors
+    sizeof(int64_t) * total_q_points * max_neighbors
   );
 
   return neighbor_indices;

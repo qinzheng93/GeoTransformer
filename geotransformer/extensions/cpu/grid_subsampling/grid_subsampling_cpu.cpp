@@ -50,8 +50,8 @@ void single_grid_subsampling_cpu(
 void grid_subsampling_cpu(
   std::vector<PointXYZ>& points,
   std::vector<PointXYZ>& s_points,
-  std::vector<long>& lengths,
-  std::vector<long>& s_lengths,
+  std::vector<int64_t>& lengths,
+  std::vector<int64_t>& s_lengths,
   float voxel_size
 ) {
   std::size_t start_index = 0;

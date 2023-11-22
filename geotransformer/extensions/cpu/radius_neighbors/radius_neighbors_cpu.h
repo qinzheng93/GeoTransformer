@@ -9,8 +9,8 @@ typedef nanoflann::KDTreeSingleIndexAdaptor<
 void radius_neighbors_cpu(
   std::vector<PointXYZ>& q_points,
   std::vector<PointXYZ>& s_points,
-  std::vector<long>& q_lengths,
-  std::vector<long>& s_lengths,
-  std::vector<long>& neighbor_indices,
+  std::vector<int64_t>& q_lengths,
+  std::vector<int64_t>& s_lengths,
+  std::vector<int64_t>& neighbor_indices,
   float radius
 );
