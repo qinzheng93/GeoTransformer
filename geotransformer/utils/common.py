@@ -2,6 +2,8 @@ import os
 import os.path as osp
 import pickle
 
+import torch
+
 
 def ensure_dir(path):
     if not osp.exists(path):
@@ -9,28 +11,28 @@ def ensure_dir(path):
 
 
 def load_pickle(filename):
-    with open(filename, 'rb') as f:
+    with open(filename, "rb") as f:
         data = pickle.load(f)
     return data
 
 
 def dump_pickle(data, filename):
-    with open(filename, 'wb') as f:
+    with open(filename, "wb") as f:
         pickle.dump(data, f)
 
 
 def get_print_format(value):
     if isinstance(value, int):
-        return 'd'
+        return "d"
     if isinstance(value, str):
-        return 's'
+        return "s"
     if value == 0:
-        return '.3f'
+        return ".3f"
     if value < 1e-6:
-        return '.3e'
+        return ".3e"
     if value < 1e-3:
-        return '.6f'
-    return '.3f'
+        return ".6f"
+    return ".3f"
 
 
 def get_format_strings(kv_pairs):
@@ -38,34 +40,46 @@ def get_format_strings(kv_pairs):
     log_strings = []
     for key, value in kv_pairs:
         fmt = get_print_format(value)
-        format_string = '{}: {:' + fmt + '}'
+        format_string = "{}: {:" + fmt + "}"
         log_strings.append(format_string.format(key, value))
     return log_strings
 
 
-def get_log_string(result_dict, epoch=None, max_epoch=None, iteration=None, max_iteration=None, lr=None, timer=None):
+def get_log_string(
+    result_dict, epoch=None, max_epoch=None, iteration=None, max_iteration=None, lr=None, timer=None
+):
     log_strings = []
     if epoch is not None:
-        epoch_string = f'Epoch: {epoch}'
+        epoch_string = f"Epoch: {epoch}"
         if max_epoch is not None:
-            epoch_string += f'/{max_epoch}'
+            epoch_string += f"/{max_epoch}"
         log_strings.append(epoch_string)
     if iteration is not None:
-        iter_string = f'iter: {iteration}'
+        iter_string = f"iter: {iteration}"
         if max_iteration is not None:
-            iter_string += f'/{max_iteration}'
+            iter_string += f"/{max_iteration}"
         if epoch is None:
             iter_string = iter_string.capitalize()
         log_strings.append(iter_string)
-    if 'metadata' in result_dict:
-        log_strings += result_dict['metadata']
+    if "metadata" in result_dict:
+        log_strings += result_dict["metadata"]
     for key, value in result_dict.items():
-        if key != 'metadata':
-            format_string = '{}: {:' + get_print_format(value) + '}'
+        if key != "metadata":
+            format_string = "{}: {:" + get_print_format(value) + "}"
             log_strings.append(format_string.format(key, value))
     if lr is not None:
-        log_strings.append('lr: {:.3e}'.format(lr))
+        log_strings.append("lr: {:.3e}".format(lr))
     if timer is not None:
         log_strings.append(timer.tostring())
-    message = ', '.join(log_strings)
+    message = ", ".join(log_strings)
     return message
+
+
+def best_torch_device():
+    # CUDA first, then Apple MPS, else CPU
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    # guard MPS access (PyTorch >=1.12 on Apple Silicon)
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():  # type: ignore[attr-defined]
+        return torch.device("mps")
+    return torch.device("cpu")

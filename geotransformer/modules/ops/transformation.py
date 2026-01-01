@@ -4,7 +4,9 @@ import torch
 import torch.nn.functional as F
 
 
-def apply_transform(points: torch.Tensor, transform: torch.Tensor, normals: Optional[torch.Tensor] = None):
+def apply_transform(
+    points: torch.Tensor, transform: torch.Tensor, normals: Optional[torch.Tensor] = None
+):
     r"""Rigid transform to points and normals (optional).
 
     Given a point cloud P(3, N), normals V(3, N) and a transform matrix T in the form of
@@ -50,7 +52,7 @@ def apply_transform(points: torch.Tensor, transform: torch.Tensor, normals: Opti
             normals = torch.matmul(normals, rotation.transpose(-1, -2))
     else:
         raise ValueError(
-            'Incompatible shapes between points {} and transform {}.'.format(
+            "Incompatible shapes between points {} and transform {}.".format(
                 tuple(points.shape), tuple(transform.shape)
             )
         )
@@ -60,7 +62,9 @@ def apply_transform(points: torch.Tensor, transform: torch.Tensor, normals: Opti
         return points
 
 
-def apply_rotation(points: torch.Tensor, rotation: torch.Tensor, normals: Optional[torch.Tensor] = None):
+def apply_rotation(
+    points: torch.Tensor, rotation: torch.Tensor, normals: Optional[torch.Tensor] = None
+):
     r"""Rotate points and normals (optional) along the origin.
 
     Given a point cloud P(3, N), normals V(3, N) and a rotation matrix R, the output point cloud Q = RP, V' = RV.
@@ -99,7 +103,9 @@ def apply_rotation(points: torch.Tensor, rotation: torch.Tensor, normals: Option
             normals = torch.matmul(normals, rotation.transpose(-1, -2))
     else:
         raise ValueError(
-            'Incompatible shapes between points {} and rotation{}.'.format(tuple(points.shape), tuple(rotation.shape))
+            "Incompatible shapes between points {} and rotation{}.".format(
+                tuple(points.shape), tuple(rotation.shape)
+            )
         )
     if normals is not None:
         return points, normals
@@ -107,7 +113,7 @@ def apply_rotation(points: torch.Tensor, rotation: torch.Tensor, normals: Option
         return points
 
 
-def get_rotation_translation_from_transform(transform):
+def get_rotation_translation_from_transform(transform: torch.Tensor):
     r"""Decompose transformation matrix into rotation matrix and translation vector.
 
     Args:
@@ -122,7 +128,7 @@ def get_rotation_translation_from_transform(transform):
     return rotation, translation
 
 
-def get_transform_from_rotation_translation(rotation, translation):
+def get_transform_from_rotation_translation(rotation: torch.Tensor, translation: torch.Tensor):
     r"""Compose transformation matrix from rotation matrix and translation vector.
 
     Args:
@@ -143,7 +149,7 @@ def get_transform_from_rotation_translation(rotation, translation):
     return transform
 
 
-def inverse_transform(transform):
+def inverse_transform(transform: torch.Tensor):
     r"""Inverse rigid transform.
 
     Args:
@@ -155,11 +161,13 @@ def inverse_transform(transform):
     rotation, translation = get_rotation_translation_from_transform(transform)  # (*, 3, 3), (*, 3)
     inv_rotation = rotation.transpose(-1, -2)  # (*, 3, 3)
     inv_translation = -torch.matmul(inv_rotation, translation.unsqueeze(-1)).squeeze(-1)  # (*, 3)
-    inv_transform = get_transform_from_rotation_translation(inv_rotation, inv_translation)  # (*, 4, 4)
+    inv_transform = get_transform_from_rotation_translation(
+        inv_rotation, inv_translation
+    )  # (*, 4, 4)
     return inv_transform
 
 
-def skew_symmetric_matrix(inputs):
+def skew_symmetric_matrix(inputs: torch.Tensor):
     r"""Compute Skew-symmetric Matrix.
 
     [v]_{\times} =  0 -z  y
@@ -184,7 +192,7 @@ def skew_symmetric_matrix(inputs):
     return skews
 
 
-def rodrigues_rotation_matrix(axes, angles):
+def rodrigues_rotation_matrix(axes: torch.Tensor, angles: torch.Tensor):
     r"""Compute Rodrigues Rotation Matrix.
 
     R = I + \sin{\theta} K + (1 - \cos{\theta}) K^2,
@@ -211,7 +219,7 @@ def rodrigues_rotation_matrix(axes, angles):
     return rotations
 
 
-def rodrigues_alignment_matrix(src_vectors, tgt_vectors):
+def rodrigues_alignment_matrix(src_vectors: torch.Tensor, tgt_vectors: torch.Tensor):
     r"""Compute the Rodrigues rotation matrix aligning source vectors to target vectors.
 
     Args:

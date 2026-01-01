@@ -1,5 +1,5 @@
-import torch
 import numpy as np
+import torch
 
 
 def rad2deg(rad: torch.Tensor) -> torch.Tensor:
@@ -26,7 +26,9 @@ def vector_angle(x: torch.Tensor, y: torch.Tensor, dim: int, use_degree: bool = 
     Returns:
         angles (Tensor): (*)
     """
-    cross = torch.linalg.norm(torch.cross(x, y, dim=dim), dim=dim)  # (*, 3 *) x (*, 3, *) -> (*, 3, *) -> (*)
+    cross = torch.linalg.norm(
+        torch.cross(x, y, dim=dim), dim=dim
+    )  # (*, 3 *) x (*, 3, *) -> (*, 3, *) -> (*)
     dot = torch.sum(x * y, dim=dim)  # (*, 3 *) x (*, 3, *) -> (*)
     angles = torch.atan2(cross, dot)  # (*)
     if use_degree:

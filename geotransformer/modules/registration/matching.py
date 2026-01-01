@@ -1,9 +1,12 @@
-from typing import Optional
+from typing import Optional, Tuple, Union
 
 import torch
-
-from geotransformer.modules.ops import index_select, apply_transform, pairwise_distance, get_point_to_node_indices
-
+from geotransformer.modules.ops import (
+    apply_transform,
+    get_point_to_node_indices,
+    index_select,
+    pairwise_distance,
+)
 
 # Extract correspondences
 
@@ -16,7 +19,7 @@ def extract_correspondences_from_scores(
     has_dustbin: bool = False,
     threshold: float = 0.0,
     return_score: bool = False,
-):
+) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
     r"""Extract the indices of correspondences from matching scores matrix (max selection).
 
     Args:
@@ -33,17 +36,18 @@ def extract_correspondences_from_scores(
         corr_scores (Tensor): (C,)
     """
     score_mat = torch.exp(score_mat)
+    device = score_mat.device
     ref_length, src_length = score_mat.shape
 
     ref_max_scores, ref_max_indices = torch.max(score_mat, dim=1)
-    ref_indices = torch.arange(ref_length).cuda()
+    ref_indices = torch.arange(ref_length, device=device)
     ref_corr_scores_mat = torch.zeros_like(score_mat)
     ref_corr_scores_mat[ref_indices, ref_max_indices] = ref_max_scores
     ref_corr_masks_mat = torch.gt(ref_corr_scores_mat, threshold)
 
     if mutual or bilateral:
         src_max_scores, src_max_indices = torch.max(score_mat, dim=0)
-        src_indices = torch.arange(src_length).cuda()
+        src_indices = torch.arange(src_length, device=device)
         src_corr_scores_mat = torch.zeros_like(score_mat)
         src_corr_scores_mat[src_max_indices, src_indices] = src_max_scores
         src_corr_masks_mat = torch.gt(src_corr_scores_mat, threshold)
@@ -69,8 +73,11 @@ def extract_correspondences_from_scores(
 
 @torch.no_grad()
 def extract_correspondences_from_scores_threshold(
-    scores_mat: torch.Tensor, threshold: float, has_dustbin: bool = False, return_score: bool = False
-):
+    scores_mat: torch.Tensor,
+    threshold: float,
+    has_dustbin: bool = False,
+    return_score: bool = False,
+) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
     r"""Extract the indices of correspondences from matching scores matrix (thresholding selection).
 
     Args:
@@ -99,8 +106,12 @@ def extract_correspondences_from_scores_threshold(
 
 @torch.no_grad()
 def extract_correspondences_from_scores_topk(
-    scores_mat: torch.Tensor, k: int, has_dustbin: bool = False, largest: bool = True, return_score: bool = False
-):
+    scores_mat: torch.Tensor,
+    k: int,
+    has_dustbin: bool = False,
+    largest: bool = True,
+    return_score: bool = False,
+) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
     r"""Extract the indices of correspondences from matching scores matrix (global top-k selection).
 
     Args:
@@ -139,7 +150,7 @@ def extract_correspondences_from_feats(
     mutual: bool = False,
     bilateral: bool = False,
     return_feat_dist: bool = False,
-):
+) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
     r"""Extract the indices of correspondences from feature distances (nn selection).
 
     Args:
@@ -157,10 +168,7 @@ def extract_correspondences_from_feats(
     feat_dists_mat = pairwise_distance(ref_feats, src_feats)
 
     ref_corr_indices, src_corr_indices = extract_correspondences_from_scores(
-        -feat_dists_mat,
-        mutual=mutual,
-        has_dustbin=False,
-        bilateral=bilateral,
+        -feat_dists_mat, mutual=mutual, has_dustbin=False, bilateral=bilateral,
     )
 
     if return_feat_dist:
@@ -181,7 +189,7 @@ def dense_correspondences_to_node_correspondences(
     src_nodes: torch.Tensor,
     corr_indices: torch.Tensor,
     return_score: bool = False,
-):
+) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
     r"""Generate patch correspondences from point correspondences and the number of point correspondences within each
     patch correspondences.
 
@@ -204,8 +212,12 @@ def dense_correspondences_to_node_correspondences(
         node_corr_counts (LongTensor): (C,)
         node_corr_scores (Tensor): (C,)
     """
-    ref_point_to_node, ref_node_sizes = get_point_to_node_indices(ref_points, ref_nodes, return_counts=True)
-    src_point_to_node, src_node_sizes = get_point_to_node_indices(src_points, src_nodes, return_counts=True)
+    ref_point_to_node, ref_node_sizes = get_point_to_node_indices(
+        ref_points, ref_nodes, return_counts=True
+    )
+    src_point_to_node, src_node_sizes = get_point_to_node_indices(
+        src_points, src_nodes, return_counts=True
+    )
 
     ref_corr_indices = corr_indices[:, 0]
     src_corr_indices = corr_indices[:, 1]
@@ -239,7 +251,7 @@ def get_node_correspondences(
     src_masks: Optional[torch.Tensor] = None,
     ref_knn_masks: Optional[torch.Tensor] = None,
     src_knn_masks: Optional[torch.Tensor] = None,
-):
+) -> Tuple[torch.Tensor, torch.Tensor]:
     r"""Generate ground-truth superpoint/patch correspondences.
 
     Each patch is composed of at most k nearest points of the corresponding superpoint.
@@ -264,16 +276,22 @@ def get_node_correspondences(
     src_nodes = apply_transform(src_nodes, transform)
     src_knn_points = apply_transform(src_knn_points, transform)
 
+    # get device from ref_nodes tensor
+    device = ref_nodes.device
+
     # generate masks
     if ref_masks is None:
-        ref_masks = torch.ones(size=(ref_nodes.shape[0],), dtype=torch.bool).cuda()
+        ref_masks = torch.ones(size=(ref_nodes.shape[0],), dtype=torch.bool, device=device)
     if src_masks is None:
-        src_masks = torch.ones(size=(src_nodes.shape[0],), dtype=torch.bool).cuda()
+        src_masks = torch.ones(size=(src_nodes.shape[0],), dtype=torch.bool, device=device)
     if ref_knn_masks is None:
-        ref_knn_masks = torch.ones(size=(ref_knn_points.shape[0], ref_knn_points.shape[1]), dtype=torch.bool).cuda()
+        ref_knn_masks = torch.ones(
+            size=(ref_knn_points.shape[0], ref_knn_points.shape[1]), dtype=torch.bool, device=device
+        )
     if src_knn_masks is None:
-        src_knn_masks = torch.ones(size=(src_knn_points.shape[0], src_knn_points.shape[1]), dtype=torch.bool).cuda()
-
+        src_knn_masks = torch.ones(
+            size=(src_knn_points.shape[0], src_knn_points.shape[1]), dtype=torch.bool, device=device
+        )
     node_mask_mat = torch.logical_and(ref_masks.unsqueeze(1), src_masks.unsqueeze(0))  # (M, N)
 
     # filter out non-overlapping patches using enclosing sphere
@@ -284,7 +302,9 @@ def get_node_correspondences(
     src_knn_dists.masked_fill_(~src_knn_masks, 0.0)
     src_max_dists = src_knn_dists.max(1)[0]  # (N,)
     dist_mat = torch.sqrt(pairwise_distance(ref_nodes, src_nodes))  # (M, N)
-    intersect_mat = torch.gt(ref_max_dists.unsqueeze(1) + src_max_dists.unsqueeze(0) + pos_radius - dist_mat, 0)
+    intersect_mat = torch.gt(
+        ref_max_dists.unsqueeze(1) + src_max_dists.unsqueeze(0) + pos_radius - dist_mat, 0
+    )
     intersect_mat = torch.logical_and(intersect_mat, node_mask_mat)
     sel_ref_indices, sel_src_indices = torch.nonzero(intersect_mat, as_tuple=True)
 
@@ -294,7 +314,9 @@ def get_node_correspondences(
     ref_knn_points = ref_knn_points[sel_ref_indices]  # (B, K, 3)
     src_knn_points = src_knn_points[sel_src_indices]  # (B, K, 3)
 
-    point_mask_mat = torch.logical_and(ref_knn_masks.unsqueeze(2), src_knn_masks.unsqueeze(1))  # (B, K, K)
+    point_mask_mat = torch.logical_and(
+        ref_knn_masks.unsqueeze(2), src_knn_masks.unsqueeze(1)
+    )  # (B, K, K)
 
     # compute overlaps
     dist_mat = pairwise_distance(ref_knn_points, src_knn_points)  # (B, K, K)
@@ -317,17 +339,17 @@ def get_node_correspondences(
 
 @torch.no_grad()
 def node_correspondences_to_dense_correspondences(
-    ref_knn_points,
-    src_knn_points,
-    ref_knn_indices,
-    src_knn_indices,
-    node_corr_indices,
-    transform,
-    matching_radius,
-    ref_knn_masks=None,
-    src_knn_masks=None,
-    return_distance=False,
-):
+    ref_knn_points: torch.Tensor,
+    src_knn_points: torch.Tensor,
+    ref_knn_indices: torch.Tensor,
+    src_knn_indices: torch.Tensor,
+    node_corr_indices: torch.Tensor,
+    transform: torch.Tensor,
+    matching_radius: float,
+    ref_knn_masks: Optional[torch.Tensor] = None,
+    src_knn_masks: Optional[torch.Tensor] = None,
+    return_distance: bool = False,
+) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
     if ref_knn_masks is None:
         ref_knn_masks = torch.ones_like(ref_knn_indices)
     if src_knn_masks is None:
@@ -342,11 +364,17 @@ def node_correspondences_to_dense_correspondences(
     src_node_corr_knn_points = src_knn_points[src_node_corr_indices]  # (P, K, 3)
     ref_node_corr_knn_masks = ref_knn_masks[ref_node_corr_indices]  # (P, K)
     src_node_corr_knn_masks = src_knn_masks[src_node_corr_indices]  # (P, K)
-    dist_mat = torch.sqrt(pairwise_distance(ref_node_corr_knn_points, src_node_corr_knn_points))  # (P, K, K)
+    dist_mat = torch.sqrt(
+        pairwise_distance(ref_node_corr_knn_points, src_node_corr_knn_points)
+    )  # (P, K, K)
     corr_mat = torch.lt(dist_mat, matching_radius)
-    mask_mat = torch.logical_and(ref_node_corr_knn_masks.unsqueeze(2), src_node_corr_knn_masks.unsqueeze(1))
+    mask_mat = torch.logical_and(
+        ref_node_corr_knn_masks.unsqueeze(2), src_node_corr_knn_masks.unsqueeze(1)
+    )
     corr_mat = torch.logical_and(corr_mat, mask_mat)  # (P, K, K)
-    batch_indices, row_indices, col_indices = torch.nonzero(corr_mat, as_tuple=True)  # (C,) (C,) (C,)
+    batch_indices, row_indices, col_indices = torch.nonzero(
+        corr_mat, as_tuple=True
+    )  # (C,) (C,) (C,)
     ref_corr_indices = ref_node_corr_knn_indices[batch_indices, row_indices]
     src_corr_indices = src_node_corr_knn_indices[batch_indices, col_indices]
     corr_indices = torch.stack([ref_corr_indices, src_corr_indices], dim=1)
@@ -359,19 +387,19 @@ def node_correspondences_to_dense_correspondences(
 
 @torch.no_grad()
 def get_node_overlap_ratios(
-    ref_points,
-    src_points,
-    ref_knn_points,
-    src_knn_points,
-    ref_knn_indices,
-    src_knn_indices,
-    node_corr_indices,
-    transform,
-    matching_radius,
-    ref_knn_masks,
-    src_knn_masks,
-    eps=1e-5,
-):
+    ref_points: torch.Tensor,
+    src_points: torch.Tensor,
+    ref_knn_points: torch.Tensor,
+    src_knn_points: torch.Tensor,
+    ref_knn_indices: torch.Tensor,
+    src_knn_indices: torch.Tensor,
+    node_corr_indices: torch.Tensor,
+    transform: torch.Tensor,
+    matching_radius: float,
+    ref_knn_masks: torch.Tensor,
+    src_knn_masks: torch.Tensor,
+    eps: float = 1e-5,
+) -> Tuple[torch.Tensor, torch.Tensor]:
     corr_indices = node_correspondences_to_dense_correspondences(
         ref_knn_points,
         src_knn_points,
@@ -391,26 +419,30 @@ def get_node_overlap_ratios(
     src_overlap_masks.index_fill_(0, unique_src_corr_indices, 1.0)
     ref_knn_overlap_masks = index_select(ref_overlap_masks, ref_knn_indices, dim=0)  # (N', K)
     src_knn_overlap_masks = index_select(src_overlap_masks, src_knn_indices, dim=0)  # (M', K)
-    ref_knn_overlap_ratios = (ref_knn_overlap_masks * ref_knn_masks).sum(1) / (ref_knn_masks.sum(1) + eps)
-    src_knn_overlap_ratios = (src_knn_overlap_masks * src_knn_masks).sum(1) / (src_knn_masks.sum(1) + eps)
+    ref_knn_overlap_ratios = (ref_knn_overlap_masks * ref_knn_masks).sum(1) / (
+        ref_knn_masks.sum(1) + eps
+    )
+    src_knn_overlap_ratios = (src_knn_overlap_masks * src_knn_masks).sum(1) / (
+        src_knn_masks.sum(1) + eps
+    )
     return ref_knn_overlap_ratios, src_knn_overlap_ratios
 
 
 @torch.no_grad()
 def get_node_occlusion_ratios(
-    ref_points,
-    src_points,
-    ref_knn_points,
-    src_knn_points,
-    ref_knn_indices,
-    src_knn_indices,
-    node_corr_indices,
-    transform,
-    matching_radius,
-    ref_knn_masks,
-    src_knn_masks,
-    eps=1e-5,
-):
+    ref_points: torch.Tensor,
+    src_points: torch.Tensor,
+    ref_knn_points: torch.Tensor,
+    src_knn_points: torch.Tensor,
+    ref_knn_indices: torch.Tensor,
+    src_knn_indices: torch.Tensor,
+    node_corr_indices: torch.Tensor,
+    transform: torch.Tensor,
+    matching_radius: float,
+    ref_knn_masks: torch.Tensor,
+    src_knn_masks: torch.Tensor,
+    eps: float = 1e-5,
+) -> Tuple[torch.Tensor, torch.Tensor]:
     ref_knn_overlap_ratios, src_knn_overlap_ratios = get_node_overlap_ratios(
         ref_points,
         src_points,

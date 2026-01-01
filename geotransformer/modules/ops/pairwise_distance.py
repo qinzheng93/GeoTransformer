@@ -24,8 +24,12 @@ def pairwise_distance(
     if normalized:
         sq_distances = 2.0 - 2.0 * xy
     else:
-        x2 = torch.sum(x ** 2, dim=channel_dim).unsqueeze(-1)  # (*, N, C) or (*, C, N) -> (*, N) -> (*, N, 1)
-        y2 = torch.sum(y ** 2, dim=channel_dim).unsqueeze(-2)  # (*, M, C) or (*, C, M) -> (*, M) -> (*, 1, M)
+        x2 = torch.sum(x ** 2, dim=channel_dim).unsqueeze(
+            -1
+        )  # (*, N, C) or (*, C, N) -> (*, N) -> (*, N, 1)
+        y2 = torch.sum(y ** 2, dim=channel_dim).unsqueeze(
+            -2
+        )  # (*, M, C) or (*, C, M) -> (*, M) -> (*, 1, M)
         sq_distances = x2 - 2 * xy + y2
     sq_distances = sq_distances.clamp(min=0.0)
     return sq_distances

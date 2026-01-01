@@ -1,12 +1,13 @@
 import warnings
 
 import torch
-
-from geotransformer.modules.ops.pairwise_distance import pairwise_distance
 from geotransformer.modules.ops.index_select import index_select
+from geotransformer.modules.ops.pairwise_distance import pairwise_distance
 
 
-def get_point_to_node_indices(points: torch.Tensor, nodes: torch.Tensor, return_counts: bool = False):
+def get_point_to_node_indices(
+    points: torch.Tensor, nodes: torch.Tensor, return_counts: bool = False
+):
     r"""Compute Point-to-Node partition indices of the point cloud.
 
     Distribute points to the nearest node. Each point is distributed to only one node.
@@ -59,14 +60,12 @@ def knn_partition(points: torch.Tensor, nodes: torch.Tensor, k: int, return_dist
 
 @torch.no_grad()
 def point_to_node_partition(
-    points: torch.Tensor,
-    nodes: torch.Tensor,
-    point_limit: int,
-    return_count: bool = False,
+    points: torch.Tensor, nodes: torch.Tensor, point_limit: int, return_count: bool = False,
 ):
     r"""Point-to-Node partition to the point cloud.
 
-    Fixed knn bug.
+    Safely handles sparse point clouds where nodes may have fewer points than point_limit.
+    Always returns tensors with shape (M, point_limit) for architectural compatibility.
 
     Args:
         points (Tensor): (N, 3)
@@ -76,31 +75,64 @@ def point_to_node_partition(
 
     Returns:
         point_to_node (Tensor): (N,)
-        node_sizes (LongTensor): (M,)
+        node_sizes (LongTensor): (M,)          # only if return_count
         node_masks (BoolTensor): (M,)
-        node_knn_indices (LongTensor): (M, K)
-        node_knn_masks (BoolTensor) (M, K)
+        node_knn_indices (LongTensor): (M, K)  # K = point_limit
+        node_knn_masks (BoolTensor): (M, K)
     """
-    sq_dist_mat = pairwise_distance(nodes, points)  # (M, N)
+    device = points.device
+    M = nodes.shape[0]
+    N = points.shape[0]
 
+    # (M, N)
+    sq_dist_mat = pairwise_distance(nodes, points)
+
+    # Assign each point to nearest node
     point_to_node = sq_dist_mat.min(dim=0)[1]  # (N,)
-    node_masks = torch.zeros(nodes.shape[0], dtype=torch.bool).cuda()  # (M,)
+    node_masks = torch.zeros(M, dtype=torch.bool, device=device)  # (M,)
     node_masks.index_fill_(0, point_to_node, True)
 
+    # Build matching mask so each point only counts for its own node
     matching_masks = torch.zeros_like(sq_dist_mat, dtype=torch.bool)  # (M, N)
-    point_indices = torch.arange(points.shape[0]).cuda()  # (N,)
+    point_indices = torch.arange(N, device=device)  # (N,)
     matching_masks[point_to_node, point_indices] = True  # (M, N)
+
+    # Mask out points that do not belong to the node
     sq_dist_mat.masked_fill_(~matching_masks, 1e12)  # (M, N)
 
-    node_knn_indices = sq_dist_mat.topk(k=point_limit, dim=1, largest=False)[1]  # (M, K)
-    node_knn_node_indices = index_select(point_to_node, node_knn_indices, dim=0)  # (M, K)
-    node_indices = torch.arange(nodes.shape[0]).cuda().unsqueeze(1).expand(-1, point_limit)  # (M, K)
-    node_knn_masks = torch.eq(node_knn_node_indices, node_indices)  # (M, K)
-    node_knn_indices.masked_fill_(~node_knn_masks, points.shape[0])
+    # Global K for topk: cannot exceed N and cannot exceed point_limit
+    max_k = min(point_limit, N)
+
+    if max_k == 0:
+        # Degenerate case: no points at all
+        sentinel = N
+        node_knn_indices = torch.full((M, point_limit), sentinel, dtype=torch.long, device=device)
+        node_knn_masks = torch.zeros((M, point_limit), dtype=torch.bool, device=device)
+    else:
+        # Top-k with safe k (only get what's available)
+        small_knn_indices = sq_dist_mat.topk(k=max_k, dim=1, largest=False)[1]  # (M, max_k)
+
+        # CRITICAL: index_select BEFORE padding with sentinel
+        # Map to node indices of those points
+        node_knn_node_indices = index_select(point_to_node, small_knn_indices, dim=0)  # (M, max_k)
+        node_indices = torch.arange(M, device=device).unsqueeze(1).expand(-1, max_k)  # (M, max_k)
+
+        # Valid neighbors: points whose assigned node == this node
+        small_knn_masks = torch.eq(node_knn_node_indices, node_indices)  # (M, max_k)
+
+        # Fill invalid neighbors with sentinel index
+        sentinel = N
+        small_knn_indices = small_knn_indices.masked_fill(~small_knn_masks, sentinel)
+
+        # Now allocate full (M, point_limit) and copy valid entries
+        node_knn_indices = torch.full((M, point_limit), sentinel, dtype=torch.long, device=device,)
+        node_knn_masks = torch.zeros((M, point_limit), dtype=torch.bool, device=device,)
+        node_knn_indices[:, :max_k] = small_knn_indices
+        node_knn_masks[:, :max_k] = small_knn_masks
 
     if return_count:
         unique_indices, unique_counts = torch.unique(point_to_node, return_counts=True)
-        node_sizes = torch.zeros(nodes.shape[0], dtype=torch.long).cuda()  # (M,)
+        node_sizes = torch.zeros(M, dtype=torch.long, device=device)  # (M,)
         node_sizes.index_put_([unique_indices], unique_counts)
         return point_to_node, node_sizes, node_masks, node_knn_indices, node_knn_masks
     else:
@@ -109,10 +141,7 @@ def point_to_node_partition(
 
 @torch.no_grad()
 def point_to_node_partition_bug(
-    points: torch.Tensor,
-    nodes: torch.Tensor,
-    point_limit: int,
-    return_count: bool = False,
+    points: torch.Tensor, nodes: torch.Tensor, point_limit: int, return_count: bool = False,
 ):
     r"""Point-to-Node partition to the point cloud.
 
@@ -133,7 +162,7 @@ def point_to_node_partition_bug(
         node_knn_indices (LongTensor): (M, K)
         node_knn_masks (BoolTensor) (M, K)
     """
-    warnings.warn('There is a bug in this implementation. Use `point_to_node_partition` instead.')
+    warnings.warn("There is a bug in this implementation. Use `point_to_node_partition` instead.")
     sq_dist_mat = pairwise_distance(nodes, points)  # (M, N)
 
     point_to_node = sq_dist_mat.min(dim=0)[1]  # (N,)
@@ -142,7 +171,9 @@ def point_to_node_partition_bug(
 
     node_knn_indices = sq_dist_mat.topk(k=point_limit, dim=1, largest=False)[1]  # (M, K)
     node_knn_node_indices = index_select(point_to_node, node_knn_indices, dim=0)  # (M, K)
-    node_indices = torch.arange(nodes.shape[0]).cuda().unsqueeze(1).expand(-1, point_limit)  # (M, K)
+    node_indices = (
+        torch.arange(nodes.shape[0]).cuda().unsqueeze(1).expand(-1, point_limit)
+    )  # (M, K)
     node_knn_masks = torch.eq(node_knn_node_indices, node_indices)  # (M, K)
     node_knn_indices.masked_fill_(~node_knn_masks, points.shape[0])
 
@@ -163,7 +194,9 @@ def ball_query_partition(
     point_limit: int,
     return_count: bool = False,
 ):
-    node_knn_distances, node_knn_indices = knn_partition(points, nodes, point_limit, return_distance=True)
+    node_knn_distances, node_knn_indices = knn_partition(
+        points, nodes, point_limit, return_distance=True
+    )
     node_knn_masks = torch.lt(node_knn_distances, radius)  # (N, k)
     sentinel_indices = torch.full_like(node_knn_indices, points.shape[0])  # (N, k)
     node_knn_indices = torch.where(node_knn_masks, node_knn_indices, sentinel_indices)  # (N, k)
